@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Broker {
+  TOSS
+  NAMUH
+  KIWOOM
+  MANUAL
+}
+
+enum ConnectionType {
+  API
+  CSV
+  EXCEL
+  MANUAL
+}
+
+enum ConnectionStatus {
+  ACTIVE
+  ERROR
+  INACTIVE
+}
+
+enum AccountType {
+  BROKERAGE
+  PENSION_SAVINGS
+  ISA
+  MANUAL
+}
+
+enum SourceType {
+  API
+  CSV
+  EXCEL
+  MANUAL
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  name        String
+  passwordHash String
+  plan        String   @default("FREE")
+  createdAt   DateTime @default(now())
+
+  connections    BrokerConnection[]
+  accounts       InvestmentAccount[]
+  accountApiKeys AccountApiCredential[]
+  targets        PortfolioTarget[]
+}
+
+model BrokerConnection {
+  id             String           @id @default(uuid())
+  userId         String
+  broker         Broker
+  brokerType     String?
+  connectionType ConnectionType
+  status         ConnectionStatus @default(ACTIVE)
+  lastSyncedAt   DateTime?
+  createdAt      DateTime         @default(now())
+
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credential BrokerCredential?
+}
+
+model BrokerCredential {
+  id              String @id @default(uuid())
+  connectionId    String @unique
+  clientId        String?
+  encryptedSecret String?
+  metadata        Json?
+
+  connection BrokerConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+}
+
+model InvestmentAccount {
+  id                String      @id @default(uuid())
+  userId            String
+  broker            Broker
+  externalAccountId String?
+  brokerAccountNo   String?
+  accountAlias      String
+  accountType       AccountType @default(BROKERAGE)
+  currencyBase      String      @default("KRW")
+  snapshotMarketValue Decimal?   @db.Decimal(18, 2)
+  snapshotProfitLoss  Decimal?   @db.Decimal(18, 2)
+  snapshotReturnRate  Decimal?   @db.Decimal(10, 4)
+  snapshotSource      String?
+  snapshotSyncedAt    DateTime?
+  createdAt         DateTime    @default(now())
+
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  holdings      Holding[]
+  apiCredential AccountApiCredential?
+}
+
+model AccountApiCredential {
+  id              String           @id @default(uuid())
+  userId          String
+  accountId       String           @unique
+  broker          Broker
+  clientId        String
+  encryptedSecret String
+  secretPreview   String
+  status          ConnectionStatus @default(ACTIVE)
+  lastValidatedAt DateTime?
+  lastUsedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  metadata        Json?
+
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account InvestmentAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
+model Security {
+  id            String  @id @default(uuid())
+  symbol        String
+  isinCode      String?
+  name          String
+  marketCountry String
+  currency      String
+  assetType     String
+  riskType      String?
+
+  holdings Holding[]
+
+  @@unique([symbol, marketCountry])
+}
+
+model CurrentPrice {
+  id            String   @id @default(uuid())
+  symbol        String
+  marketCountry String
+  currency      String
+  price         Decimal  @db.Decimal(18, 6)
+  priceKrw      Decimal  @db.Decimal(18, 4)
+  source        String
+  fetchedAt     DateTime
+  expiresAt     DateTime
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([symbol, marketCountry])
+}
+
+model MarketIndicator {
+  id                String   @id @default(uuid())
+  symbol            String   @unique
+  name              String
+  category          String
+  value             Decimal  @db.Decimal(18, 6)
+  change            Decimal  @db.Decimal(18, 6)
+  changeRate        Decimal  @db.Decimal(10, 4)
+  status            String
+  currency          String?
+  unit              String?
+  marketState       String?
+  source            String
+  refreshIntervalMs Int      @default(60000)
+  lastUpdatedAt     DateTime
+  expiresAt         DateTime
+  errorMessage      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Holding {
+  id                     String   @id @default(uuid())
+  accountId              String
+  securityId             String
+  quantity               Decimal  @db.Decimal(18, 6)
+  averagePurchasePrice   Decimal  @db.Decimal(18, 4)
+  marketPrice            Decimal  @db.Decimal(18, 4)
+  marketValue            Decimal  @db.Decimal(18, 2)
+  costAmount             Decimal  @db.Decimal(18, 2)
+  profitLoss             Decimal  @db.Decimal(18, 2)
+  profitLossRate         Decimal  @db.Decimal(10, 4)
+  annualDividendEstimate Decimal  @db.Decimal(18, 2) @default(0)
+  sourceType             SourceType
+  snapshotDate           DateTime @default(now())
+
+  account  InvestmentAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  security Security          @relation(fields: [securityId], references: [id], onDelete: Cascade)
+}
+
+model PortfolioTarget {
+  id           String  @id @default(uuid())
+  userId       String
+  targetType   String
+  targetKey    String
+  targetWeight Decimal @db.Decimal(8, 4)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetKey])
+}

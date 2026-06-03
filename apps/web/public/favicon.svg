@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="blueArc" x1="24" x2="104" y1="106" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#071b78"/>
+      <stop offset="0.45" stop-color="#0a8dff"/>
+      <stop offset="1" stop-color="#082fd8"/>
+    </linearGradient>
+    <linearGradient id="greenWave" x1="20" x2="106" y1="86" y2="57" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#05c7d9"/>
+      <stop offset="0.45" stop-color="#22e46d"/>
+      <stop offset="1" stop-color="#4df0bd"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="37" x2="104" y1="101" y2="35" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#07226f"/>
+      <stop offset="0.52" stop-color="#077ea8"/>
+      <stop offset="1" stop-color="#0b35dc"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#12316a" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <rect width="128" height="128" rx="29" fill="#ffffff"/>
+  <g filter="url(#softShadow)">
+    <path
+      d="M25.3 79.4A45.5 45.5 0 0 1 92.9 31.1"
+      fill="none"
+      stroke="url(#blueArc)"
+      stroke-linecap="round"
+      stroke-width="11.2"
+    />
+    <path
+      d="M102.2 62.3a45.6 45.6 0 0 1-71.7 32.4"
+      fill="none"
+      stroke="url(#blueArc)"
+      stroke-linecap="round"
+      stroke-width="11.2"
+    />
+    <path
+      d="M21.2 82.9 52.4 55.6a8 8 0 0 1 10.5.1l19.7 18.6 14.8-16.4 10.9 9.8-19.8 21.9a8 8 0 0 1-11.4.5L57.6 71.7 31.8 94.2Z"
+      fill="url(#greenWave)"
+    />
+    <path
+      d="M36.2 104.6 57.3 72.3a7.2 7.2 0 0 1 10.4-1.7L86.1 84l23.5-28.3-9.1-6a4.9 4.9 0 0 1 .9-8.7l22-8.8a4.9 4.9 0 0 1 6.7 5.1l-2.9 23.5a4.9 4.9 0 0 1-8.1 3.1l-6.7-6.2-25.1 30.1a8.2 8.2 0 0 1-11.2 1.1L64.4 80.5l-19 29.1Z"
+      fill="url(#arrow)"
+    />
+    <path
+      d="M36.2 104.6 45.4 89.7 31.8 94.2Z"
+      fill="#061c65"
+      opacity="0.75"
+    />
+  </g>
+</svg>

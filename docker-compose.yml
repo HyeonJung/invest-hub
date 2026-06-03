@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: invest-hub-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: investhub
+      POSTGRES_PASSWORD: investhub
+      POSTGRES_DB: investhub
+    ports:
+      - "5433:5432"
+    volumes:
+      - invest_hub_pg:/var/lib/postgresql/data
+
+volumes:
+  invest_hub_pg:

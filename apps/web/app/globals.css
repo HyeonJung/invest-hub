@@ -8,8 +8,14 @@
   --surface: #ffffff;
   --surface-subtle: #f8fafc;
   --surface-hover: #f1f5f9;
-  --sidebar-bg: #ffffff;
-  --sidebar-border: #e5eaf0;
+  --sidebar-bg: #07111f;
+  --sidebar-surface: #0d1729;
+  --sidebar-surface-hover: #13223a;
+  --sidebar-active: #14233b;
+  --sidebar-text-primary: #e5eaf2;
+  --sidebar-text-secondary: #94a3b8;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-primary: #3b82f6;
   --card-bg: #ffffff;
   --card-border: #e5eaf0;
   --text-primary: #0f172a;

@@ -22,6 +22,7 @@ import {
   LineChart as LineChartIcon,
   Loader2,
   LogOut,
+  Menu,
   PieChart as PieIcon,
   Plus,
   RefreshCw,
@@ -135,6 +136,7 @@ export default function DashboardPage() {
   const [view, setView] = useState<ViewKey>("overview");
   const [priceRefreshInterval, setPriceRefreshInterval] = useState(300_000);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const priceRefreshQuery = useQuery({
     queryKey: ["prices", "refresh"],
@@ -208,11 +210,13 @@ export default function DashboardPage() {
 
   function navigate(next: ViewKey) {
     setView(next);
+    setMobileSidebarOpen(false);
     const account = accountNavigation.find((item) => item.key === next);
     notify({ kind: "info", title: "화면 이동", description: `${account?.displayName ?? navLabel(next)} 화면으로 이동했습니다.` });
   }
 
   function openConnectModal() {
+    setMobileSidebarOpen(false);
     setConnectModalOpen(true);
   }
 
@@ -242,7 +246,15 @@ export default function DashboardPage() {
 
   return (
     <div className="dashboard-shell flex h-screen w-screen overflow-hidden bg-[#F7F9FC]" data-dashboard-shell>
-      <aside className="dashboard-sidebar hidden h-screen w-[240px] shrink-0 border-r lg:block" data-sidebar>
+      <button
+        type="button"
+        className="fixed left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm lg:hidden"
+        onClick={() => setMobileSidebarOpen(true)}
+        aria-label="사이드바 열기"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+      <aside className="dashboard-sidebar hidden h-screen w-[256px] shrink-0 border-r lg:block" data-sidebar>
         <Sidebar
           active={view}
           accounts={accountNavigation}
@@ -251,14 +263,36 @@ export default function DashboardPage() {
           onLogout={() => logout(router, notify)}
         />
       </aside>
+      {mobileSidebarOpen ? (
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true">
+          <button className="absolute inset-0 bg-slate-950/45" onClick={() => setMobileSidebarOpen(false)} aria-label="사이드바 닫기" />
+          <aside className="relative h-full w-[256px] border-r border-white/10 bg-[#07111F] shadow-2xl" data-mobile-sidebar>
+            <button
+              type="button"
+              className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
+              onClick={() => setMobileSidebarOpen(false)}
+              aria-label="사이드바 닫기"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <Sidebar
+              active={view}
+              accounts={accountNavigation}
+              onNavigate={navigate}
+              onConnectAccount={openConnectModal}
+              onLogout={() => logout(router, notify)}
+            />
+          </aside>
+        </div>
+      ) : null}
       <main className="dashboard-main min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-7 lg:px-9 2xl:px-10" data-main-content>
         <div className="mx-auto min-w-0 max-w-[1440px] space-y-6">
           <Header
-          view={view}
-          onChange={navigate}
-          onRefresh={refreshPricesNow}
-          priceRefreshing={priceRefreshQuery.isFetching}
-        />
+            view={view}
+            onChange={navigate}
+            onRefresh={refreshPricesNow}
+            priceRefreshing={priceRefreshQuery.isFetching}
+          />
           {view !== "overview" && (priceRefreshQuery.error || (priceRefreshQuery.data?.errors?.length ?? 0) > 0) ? (
             <PriceRefreshStatus
               data={priceRefreshQuery.data}
@@ -334,61 +368,228 @@ function Sidebar({
   onConnectAccount: () => void;
   onLogout: () => void;
 }) {
-  const firstAccount = accounts[0]?.key;
-  const navItems: Array<{ label: string; icon: ElementType; target: ViewKey; active: boolean; badge?: string }> = [
-    { label: "대시보드", icon: BriefcaseBusiness, target: "overview", active: active === "overview" },
-    { label: "계좌", icon: Wallet, target: "upload", active: active === "upload" },
-    { label: "보유 종목", icon: BriefcaseBusiness, target: firstAccount ?? "upload", active: isAccountView(active) },
-    { label: "분석", icon: BarChart3, target: "ai", active: active === "ai" || active === "rebalance" || active === "dividend" || active === "tax" },
-    { label: "알림", icon: Bell, target: "alerts", active: active === "alerts", badge: "3" },
+  const secondaryItems: Array<{ label: string; icon: ElementType; target: ViewKey; active: boolean; badge?: string }> = [
+    { label: "AI 분석", icon: BarChart3, target: "ai", active: active === "ai" },
+    { label: "리밸런싱 추천", icon: RefreshCw, target: "rebalance", active: active === "rebalance" },
+    { label: "배당 캘린더", icon: Gift, target: "dividend", active: active === "dividend" },
+    { label: "세금/절세", icon: CircleDollarSign, target: "tax", active: active === "tax" },
+    { label: "시장 지표", icon: Globe2, target: "market", active: active === "market" },
+    { label: "알림 센터", icon: Bell, target: "alerts", active: active === "alerts", badge: "3" },
+    { label: "업로드 관리", icon: Upload, target: "upload", active: active === "upload" },
     { label: "설정", icon: Settings, target: "settings", active: active === "settings" }
   ];
 
   return (
-    <div className="flex h-full flex-col px-4 py-6">
+    <div className="flex h-full flex-col bg-[#07111F] px-3 py-5 text-[#E5EAF2]">
       <div className="flex h-11 items-center gap-3 px-2">
-        <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-white shadow-[0_8px_22px_rgba(37,99,235,0.18)]">
+        <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-white shadow-[0_10px_28px_rgba(59,130,246,0.28)]">
           <img src="/favicon.svg" alt="Invest Hub" className="h-8 w-8" />
         </span>
-        <span className="text-[21px] font-black text-[#0F172A]">대시보드</span>
+        <span className="text-[17px] font-black tracking-[-0.01em] text-white">INVEST HUB</span>
       </div>
-      <nav className="mt-8 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 premium-scrollbar">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <motion.button
-              key={item.label}
-              onClick={() => onNavigate(item.target)}
-              whileHover={{ x: 2 }}
-              transition={{ duration: 0.18 }}
-              className={cn(
-                "relative flex h-12 w-full items-center gap-3 rounded-xl px-4 text-left text-[15px] font-bold transition",
-                item.active ? "theme-nav-active" : "theme-nav-idle"
-              )}
+      <nav className="mt-5 min-h-0 flex-1 space-y-5 overflow-y-auto pr-1 premium-scrollbar">
+        <SidebarNavButton
+          label="대시보드"
+          icon={BriefcaseBusiness}
+          active={active === "overview"}
+          onClick={() => onNavigate("overview")}
+        />
+
+        <section className="space-y-2">
+          <div className="flex items-center justify-between px-2">
+            <p className="text-[12px] font-black text-[#94A3B8]">내 계좌</p>
+            <button
+              type="button"
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#0D1729] text-[#94A3B8] transition hover:bg-[#13223A] hover:text-white"
+              onClick={onConnectAccount}
+              aria-label="계좌 연결"
+              title="계좌 연결"
             >
-              <Icon className="h-5 w-5" />
-              <span className="min-w-0 flex-1 truncate">{item.label}</span>
-              {item.badge ? (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#FF4D5D] px-1.5 text-[11px] font-black text-white">
-                  {item.badge}
-                </span>
-              ) : null}
-            </motion.button>
-          );
-        })}
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+          <AccountTree accounts={accounts} active={active} onNavigate={onNavigate} onConnectAccount={onConnectAccount} />
+        </section>
+
+        <section className="space-y-1 border-t border-white/5 pt-4">
+          {secondaryItems.map((item) => (
+            <SidebarNavButton
+              key={item.label}
+              label={item.label}
+              icon={item.icon}
+              active={item.active}
+              badge={item.badge}
+              onClick={() => onNavigate(item.target)}
+            />
+          ))}
+        </section>
       </nav>
       <div className="mt-5 space-y-2 pb-1">
-        <Button className="h-10 w-full justify-start rounded-xl bg-transparent px-4 text-[13px] font-bold text-[var(--text-secondary)]" variant="ghost" onClick={onConnectAccount}>
-          <Plus className="h-4 w-4" />
-          계좌 연결
-        </Button>
-        <Button className="h-10 w-full justify-start rounded-xl bg-transparent px-4 text-[13px] font-bold text-[var(--text-secondary)]" variant="ghost" onClick={onLogout}>
+        <Button className="h-10 w-full justify-start rounded-xl bg-transparent px-3 text-[13px] font-bold text-[#94A3B8] hover:bg-[#13223A] hover:text-white" variant="ghost" onClick={onLogout}>
           <LogOut className="h-4 w-4" />
           로그아웃
         </Button>
       </div>
     </div>
   );
+}
+
+function SidebarNavButton({
+  label,
+  icon: Icon,
+  active,
+  badge,
+  onClick
+}: {
+  label: string;
+  icon: ElementType;
+  active: boolean;
+  badge?: string;
+  onClick: () => void;
+}) {
+  return (
+    <motion.button
+      onClick={onClick}
+      whileHover={{ x: 2 }}
+      transition={{ duration: 0.18 }}
+      className={cn(
+        "relative flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-[13px] font-bold transition",
+        active ? "bg-[#14233B] text-white shadow-[inset_3px_0_0_#3B82F6]" : "text-[#94A3B8] hover:bg-[#13223A] hover:text-[#E5EAF2]"
+      )}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {badge ? (
+        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#FF4D5D] px-1.5 text-[11px] font-black text-white">
+          {badge}
+        </span>
+      ) : null}
+    </motion.button>
+  );
+}
+
+function AccountTree({
+  accounts,
+  active,
+  onNavigate,
+  onConnectAccount
+}: {
+  accounts: AccountNavigationItem[];
+  active: ViewKey;
+  onNavigate: (view: ViewKey) => void;
+  onConnectAccount: () => void;
+}) {
+  const groups = buildBrokerAccountGroups(accounts);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => readSidebarOpenGroups());
+
+  useEffect(() => {
+    setOpenGroups((current) => {
+      const next = { ...current };
+      for (const group of groups) {
+        next[group.broker] = next[group.broker] ?? true;
+      }
+      return next;
+    });
+  }, [groups.map((group) => `${group.broker}:${group.accounts.length}`).join("|")]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("invest-hub-sidebar-groups", JSON.stringify(openGroups));
+    } catch {
+      // localStorage persistence is best-effort only.
+    }
+  }, [openGroups]);
+
+  if (groups.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-white/10 bg-[#0D1729] p-3">
+        <p className="text-[13px] font-black text-white">연결된 계좌 없음</p>
+        <p className="mt-1 text-[12px] leading-5 text-[#94A3B8]">계좌를 연결하면 이곳에 증권사별로 표시됩니다.</p>
+        <button
+          type="button"
+          className="mt-3 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#14233B] text-[12px] font-black text-[#E5EAF2] transition hover:bg-[#1B2E4D]"
+          onClick={onConnectAccount}
+        >
+          <Plus className="h-4 w-4" />
+          계좌 연결하기
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {groups.map((group) => {
+        const Icon = brokerGroupIcon(group.broker);
+        const color = brokerColor(group.broker);
+        const isOpen = openGroups[group.broker] ?? true;
+
+        return (
+          <div key={group.broker} className="space-y-1">
+            <button
+              type="button"
+              className="flex h-9 w-full items-center gap-2 rounded-xl px-2 text-left text-[#E5EAF2] transition hover:bg-[#13223A]"
+              onClick={() => setOpenGroups((current) => ({ ...current, [group.broker]: !(current[group.broker] ?? true) }))}
+            >
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white shadow-[0_8px_18px_rgba(0,0,0,0.25)]" style={{ backgroundColor: color }}>
+                <Icon className="h-3.5 w-3.5" />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px] font-black">
+                {group.label} <span className="font-bold text-[#94A3B8]">({group.accounts.length})</span>
+              </span>
+              <ChevronDown className={cn("h-4 w-4 shrink-0 text-[#64748B] transition-transform duration-200", !isOpen && "-rotate-90")} />
+            </button>
+            <motion.div
+              initial={false}
+              animate={isOpen ? { height: "auto", opacity: 1 } : { height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="overflow-hidden"
+            >
+              <div className="space-y-1 pl-2">
+                {group.accounts.map((account) => {
+                  const isActive = active === account.key;
+                  return (
+                    <button
+                      key={account.key}
+                      type="button"
+                      className={cn(
+                        "flex h-9 w-full items-center gap-3 rounded-lg px-3 text-left transition",
+                        isActive ? "bg-[#14233B] text-white" : "text-[#94A3B8] hover:bg-[#13223A] hover:text-[#E5EAF2]"
+                      )}
+                      onClick={() => onNavigate(account.key)}
+                    >
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                      <span className="min-w-0 flex-1 truncate text-[12px] font-bold">{account.shortName}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#0D1729] text-[13px] font-black text-[#CBD5E1] transition hover:bg-[#14233B] hover:text-white"
+        onClick={onConnectAccount}
+      >
+        <Plus className="h-4 w-4" />
+        계좌 연결하기
+      </button>
+    </div>
+  );
+}
+
+function readSidebarOpenGroups() {
+  if (typeof window === "undefined") return {};
+  try {
+    const stored = window.localStorage.getItem("invest-hub-sidebar-groups");
+    if (!stored) return {};
+    const parsed = JSON.parse(stored) as Record<string, boolean>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function Header({
@@ -4226,6 +4427,15 @@ function brokerAccentClass(broker: BrokerKey) {
     KIWOOM: "bg-violet-500"
   };
   return classes[broker];
+}
+
+function brokerColor(broker: BrokerKey) {
+  const colors: Record<BrokerKey, string> = {
+    TOSS: "#3B82F6",
+    NAMUH: "#22C55E",
+    KIWOOM: "#A855F7"
+  };
+  return colors[broker];
 }
 
 function sortMarketIndicators(indicators: MarketIndicatorsResult["indicators"]) {

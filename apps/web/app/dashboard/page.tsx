@@ -521,6 +521,7 @@ function AccountTree({
     <div className="space-y-2">
       {groups.map((group) => {
         const Icon = brokerGroupIcon(group.broker);
+        const iconSrc = brokerGroupIconSrc(group.broker);
         const color = brokerColor(group.broker);
         const isOpen = openGroups[group.broker] ?? true;
 
@@ -531,8 +532,18 @@ function AccountTree({
               className="flex h-9 w-full items-center gap-2 rounded-xl px-2 text-left text-[#E5EAF2] transition hover:bg-[#13223A]"
               onClick={() => setOpenGroups((current) => ({ ...current, [group.broker]: !(current[group.broker] ?? true) }))}
             >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white shadow-[0_8px_18px_rgba(0,0,0,0.25)]" style={{ backgroundColor: color }}>
-                <Icon className="h-3.5 w-3.5" />
+              <span
+                className={cn(
+                  "flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-lg shadow-[0_8px_18px_rgba(0,0,0,0.25)]",
+                  iconSrc ? "bg-white p-0.5" : "text-white"
+                )}
+                style={iconSrc ? undefined : { backgroundColor: color }}
+              >
+                {iconSrc ? (
+                  <img src={iconSrc} alt="" className="h-full w-full object-contain" loading="lazy" />
+                ) : (
+                  <Icon className="h-3.5 w-3.5" />
+                )}
               </span>
               <span className="min-w-0 flex-1 truncate text-[13px] font-black">
                 {group.label} <span className="font-bold text-[#94A3B8]">({group.accounts.length})</span>
@@ -4416,6 +4427,14 @@ function brokerGroupIcon(broker: BrokerKey) {
     TOSS: Wallet,
     NAMUH: PieIcon,
     KIWOOM: BarChart3
+  };
+  return icons[broker];
+}
+
+function brokerGroupIconSrc(broker: BrokerKey) {
+  const icons: Partial<Record<BrokerKey, string>> = {
+    TOSS: "/brokers/toss-symbol-primary.png",
+    KIWOOM: "/brokers/kiwoom-ci-symbol.png"
   };
   return icons[broker];
 }

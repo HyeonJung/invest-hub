@@ -41,8 +41,8 @@ export function LossStickerBadge({
 
   const visibleMobileCount = Math.min(3, stickerCount);
   const hiddenMobileCount = stickerCount - visibleMobileCount;
-  const itemSizeClass = size === "md" ? "h-6 w-6" : "h-5 w-5";
-  const emojiSizeClass = size === "md" ? "text-[16px]" : "text-[14px]";
+  const itemSizeClass = size === "md" ? "h-8 w-8" : "h-7 w-7";
+  const emojiSizeClass = size === "md" ? "text-[17px]" : "text-[15px]";
   const title = `손실률 ${formatPercent(profitLossRate)} · -5%당 경고 스티커 1개 · 현재 ${stickerCount}개 표시`;
 
   return (
@@ -99,7 +99,6 @@ export function ProfitStickerBadge({
   const stickerCount = Math.floor((profitLossRate % 100) / 5);
   if (burgerCount <= 0 && stickerCount <= 0) return null;
 
-  const burgerSizeClass = size === "md" ? "h-7 w-7" : "h-6 w-6";
   const stickerSizeClass = size === "md" ? "h-8 w-8" : "h-7 w-7";
   const emojiSizeClass = size === "md" ? "text-[17px]" : "text-[15px]";
   const title = `수익률 ${formatPercent(profitLossRate)} · +100%당 햄버거 1개, 남은 +5%당 스티커 1개 · 햄버거 ${burgerCount}개, 스티커 ${stickerCount}개 표시`;
@@ -130,7 +129,7 @@ export function ProfitStickerBadge({
             src={PROFIT_BURGER_IMAGE_SRC}
             alt=""
             loading="lazy"
-            className={cn("shrink-0 object-contain transition-transform hover:scale-110", burgerSizeClass)}
+            className={cn("shrink-0 object-contain transition-transform hover:scale-110", stickerSizeClass)}
           />
         );
       })}

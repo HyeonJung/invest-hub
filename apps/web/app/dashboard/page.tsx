@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState, type ElementType } from "react";
+import { useEffect, useState, type ElementType, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -13,23 +13,31 @@ import {
   ChevronDown,
   ChevronRight,
   CircleDollarSign,
+  Clock3,
   Download,
+  Eye,
+  EyeOff,
   FileSpreadsheet,
   Gift,
   Globe2,
   Info,
+  KeyRound,
   Landmark,
   LineChart as LineChartIcon,
   Loader2,
+  LockKeyhole,
   LogOut,
   Menu,
+  MoreVertical,
   PieChart as PieIcon,
   Plus,
   RefreshCw,
   Search,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   Upload,
+  UserRound,
   Wallet,
   X
 } from "lucide-react";
@@ -319,7 +327,7 @@ export default function DashboardPage() {
               priceRefreshing={priceRefreshQuery.isFetching}
             />
           ) : null}
-          {view !== "overview" && !isAccountView(view) && (priceRefreshQuery.error || (priceRefreshQuery.data?.errors?.length ?? 0) > 0) ? (
+          {view !== "overview" && view !== "settings" && !isAccountView(view) && (priceRefreshQuery.error || (priceRefreshQuery.data?.errors?.length ?? 0) > 0) ? (
             <PriceRefreshStatus
               data={priceRefreshQuery.data}
               loading={priceRefreshQuery.isFetching}
@@ -346,7 +354,19 @@ export default function DashboardPage() {
             )
           ) : null}
           {view === "upload" ? <UploadManager token={token} /> : null}
-          {view === "settings" ? <SettingsPanel token={token} user={currentUser} onLogout={handleLogout} /> : null}
+          {view === "settings" ? (
+            <SettingsPanel
+              token={token}
+              user={currentUser}
+              onLogout={handleLogout}
+              onConnectAccount={openConnectModal}
+              priceStatus={priceRefreshQuery.data}
+              priceStatusLoading={priceRefreshQuery.isFetching}
+              priceStatusError={(priceRefreshQuery.error as Error | null) ?? null}
+              refreshInterval={priceRefreshInterval}
+              onRefreshIntervalChange={setPriceRefreshInterval}
+            />
+          ) : null}
           {view === "rebalance" ? <RebalancePanel token={token} /> : null}
           {view === "ai" ? <AiPanel token={token} marketIndicators={marketIndicatorsQuery.data} /> : null}
           {view === "dividend" ? <SimpleAnalysisPanel token={token} kind="dividend" /> : null}
@@ -3027,8 +3047,55 @@ function ValidationBadge({ label, value }: { label: string; value: number }) {
   );
 }
 
-function SettingsPanel({ token, user, onLogout }: { token: string; user: AuthUser | null; onLogout: () => void }) {
+type SettingsTabKey = "account" | "api" | "alerts" | "security" | "service";
+
+const settingsTabs: Array<{ key: SettingsTabKey; label: string }> = [
+  { key: "account", label: "계정" },
+  { key: "api", label: "API 연동" },
+  { key: "alerts", label: "알림" },
+  { key: "security", label: "보안" },
+  { key: "service", label: "서비스" }
+];
+
+const defaultNotificationSettings = {
+  price: true,
+  rebalance: true,
+  dividend: true,
+  fx: true,
+  fearGreed: true
+};
+
+type NotificationSettings = typeof defaultNotificationSettings;
+type SecurityDetail = { title: string; description: string } | null;
+
+function SettingsPanel({
+  token,
+  user,
+  onLogout,
+  onConnectAccount,
+  priceStatus,
+  priceStatusLoading,
+  priceStatusError,
+  refreshInterval,
+  onRefreshIntervalChange
+}: {
+  token: string;
+  user: AuthUser | null;
+  onLogout: () => void;
+  onConnectAccount: () => void;
+  priceStatus?: PriceRefreshResult;
+  priceStatusLoading: boolean;
+  priceStatusError: Error | null;
+  refreshInterval: number;
+  onRefreshIntervalChange: (value: number) => void;
+}) {
   const { notify } = useToast();
+  const [activeTab, setActiveTab] = useState<SettingsTabKey>("api");
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(defaultNotificationSettings);
+  const [language, setLanguage] = useState("ko");
+  const [syncDetailOpen, setSyncDetailOpen] = useState(false);
+  const [accountEditOpen, setAccountEditOpen] = useState(false);
+  const [securityDetail, setSecurityDetail] = useState<SecurityDetail>(null);
   const [targets, setTargets] = useState(defaultTargets);
   const query = useQuery({ queryKey: ["targets"], queryFn: () => api.targets(token) });
   const mutation = useMutation({
@@ -3043,74 +3110,327 @@ function SettingsPanel({ token, user, onLogout }: { token: string; user: AuthUse
     }
   }, [query.data]);
 
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("invest-hub-notification-settings");
+      if (saved) {
+        setNotificationSettings({ ...defaultNotificationSettings, ...JSON.parse(saved) });
+      }
+      const savedLanguage = window.localStorage.getItem("invest-hub-language");
+      if (savedLanguage) setLanguage(savedLanguage);
+    } catch {
+      setNotificationSettings(defaultNotificationSettings);
+    }
+  }, []);
+
+  function selectTab(tab: SettingsTabKey) {
+    setActiveTab(tab);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`settings-${tab}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function toggleNotification(key: keyof NotificationSettings) {
+    setNotificationSettings((current) => {
+      const next = { ...current, [key]: !current[key] };
+      window.localStorage.setItem("invest-hub-notification-settings", JSON.stringify(next));
+      notify({
+        kind: "success",
+        title: "알림 설정 변경",
+        description: `${notificationLabel(key)} 알림을 ${next[key] ? "켰습니다." : "껐습니다."}`
+      });
+      return next;
+    });
+  }
+
+  function changeLanguage(value: string) {
+    setLanguage(value);
+    window.localStorage.setItem("invest-hub-language", value);
+    notify({ kind: "success", title: "언어 설정 변경", description: value === "ko" ? "한국어로 표시합니다." : "영어 표시는 준비 중이며 기본 문구는 한국어로 유지됩니다." });
+  }
+
+  function changeRefreshInterval(value: number) {
+    onRefreshIntervalChange(value);
+    notify({ kind: "success", title: "갱신 주기 변경", description: `현재가 자동 갱신 주기를 ${formatInterval(value)}로 변경했습니다.` });
+  }
+
   return (
-    <div className="space-y-4">
-      <AccountSettingsCard user={user} onLogout={onLogout} />
-      <TossCredentialSettings token={token} />
-      <NamuhCredentialProfilesSettings token={token} />
-      <KiwoomCredentialProfilesSettings token={token} />
-      <Card>
-        <CardHeader>
-          <CardTitle>목표 비중 설정</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {targets.map((target, index) => (
-            <div key={target.targetKey} className="grid items-center gap-3 rounded-xl bg-slate-50 p-4 md:grid-cols-[160px_1fr_90px]">
-              <p className="font-bold text-slate-900">{target.targetKey}</p>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={target.targetWeight}
-                onChange={(event) => {
-                  const next = [...targets];
-                  next[index] = { ...target, targetWeight: Number(event.target.value) };
-                  setTargets(next);
-                }}
-              />
-              <Input
-                type="number"
-                value={target.targetWeight}
-                onChange={(event) => {
-                  const next = [...targets];
-                  next[index] = { ...target, targetWeight: Number(event.target.value) };
-                  setTargets(next);
-                }}
-              />
-            </div>
-          ))}
-          <div className="flex gap-3">
-            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-              {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              저장
-            </Button>
-            <Button variant="outline" onClick={() => setTargets(defaultTargets)}>
-              기본값 복원
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="mx-auto max-w-[1120px] space-y-6" data-settings-content>
+      <SyncStatusCard
+        data={priceStatus}
+        loading={priceStatusLoading}
+        error={priceStatusError}
+        onOpenDetails={() => setSyncDetailOpen(true)}
+        onConfigure={() => selectTab("service")}
+      />
+      <SettingsTabs active={activeTab} onSelect={selectTab} />
+      <section id="settings-api" className="scroll-mt-6">
+        <ConnectedServicesCard token={token} onConnectAccount={onConnectAccount} />
+      </section>
+      <section id="settings-account" className="scroll-mt-6">
+        <AccountSettingsCard user={user} onLogout={onLogout} onEdit={() => setAccountEditOpen(true)} />
+      </section>
+      <section id="settings-security" className="scroll-mt-6">
+        <SecuritySettingsCard user={user} onLogout={onLogout} onOpenDetail={setSecurityDetail} />
+      </section>
+      <section id="settings-alerts" className="scroll-mt-6">
+        <NotificationSettingsCard settings={notificationSettings} onToggle={toggleNotification} />
+      </section>
+      <section id="settings-service" className="scroll-mt-6">
+        <MiscSettingsCard
+          language={language}
+          onLanguageChange={changeLanguage}
+          refreshInterval={refreshInterval}
+          onRefreshIntervalChange={changeRefreshInterval}
+          targets={targets}
+          setTargets={setTargets}
+          onSaveTargets={() => mutation.mutate()}
+          onResetTargets={() => setTargets(defaultTargets)}
+          savingTargets={mutation.isPending}
+          targetsLoading={query.isFetching}
+        />
+      </section>
+      <SettingsModal open={syncDetailOpen} title="현재가 갱신 상세" onClose={() => setSyncDetailOpen(false)}>
+        <PriceRefreshDetailPanel data={priceStatus} error={priceStatusError} />
+      </SettingsModal>
+      <SettingsModal open={accountEditOpen} title="계정 정보 수정" onClose={() => setAccountEditOpen(false)}>
+        <p className="text-sm font-semibold leading-6 text-slate-600">
+          현재 프로필 정보는 로그인한 소셜 계정에서 동기화됩니다. 이름과 프로필 이미지는 카카오/네이버 계정에서 수정한 뒤 다시 로그인하면 반영됩니다.
+        </p>
+      </SettingsModal>
+      <SettingsModal open={Boolean(securityDetail)} title={securityDetail?.title ?? "보안 설정"} onClose={() => setSecurityDetail(null)}>
+        <p className="text-sm font-semibold leading-6 text-slate-600">{securityDetail?.description}</p>
+      </SettingsModal>
     </div>
   );
 }
 
-function AccountSettingsCard({ user, onLogout }: { user: AuthUser | null; onLogout: () => void }) {
+function SettingsTabs({ active, onSelect }: { active: SettingsTabKey; onSelect: (tab: SettingsTabKey) => void }) {
+  return (
+    <div className="min-w-0 overflow-x-auto border-b border-[#E5EAF0]">
+      <div className="flex min-w-max gap-7 px-1">
+        {settingsTabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            className={cn(
+              "relative h-12 text-sm font-black transition",
+              active === tab.key ? "text-[#2563EB]" : "text-[#64748B] hover:text-[#0F172A]"
+            )}
+            onClick={() => onSelect(tab.key)}
+          >
+            {tab.label}
+            {active === tab.key ? <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-[#2563EB]" /> : null}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SyncStatusCard({
+  data,
+  loading,
+  error,
+  onOpenDetails,
+  onConfigure
+}: {
+  data?: PriceRefreshResult;
+  loading: boolean;
+  error: Error | null;
+  onOpenDetails: () => void;
+  onConfigure: () => void;
+}) {
+  const hasFailure = Boolean(error || (data?.errors?.length ?? 0) > 0);
+  const statusText = loading ? "확인 중" : hasFailure ? "일부 실패" : "정상";
+
+  return (
+    <div className="grid gap-3">
+      <div className="rounded-2xl border border-[#DCE6F2] bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#ECFDF5] text-[#16A34A]">
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />}
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-black text-[#0F172A]">현재가 자동 갱신 중</p>
+                <StatusBadge status={hasFailure ? "ERROR" : "ACTIVE"} label={statusText} />
+              </div>
+              <p className="mt-1 truncate text-sm font-semibold text-[#64748B]">
+                마지막 성공 {formatDateTime(data?.lastSuccessAt)} · 주기 {formatInterval(data?.refreshIntervalMs)}
+              </p>
+            </div>
+          </div>
+          <Button variant="outline" onClick={onConfigure}>
+            <SlidersHorizontal className="h-4 w-4" />
+            상태 설정
+          </Button>
+        </div>
+      </div>
+      {hasFailure ? (
+        <div className="rounded-2xl border border-orange-200 bg-[#FFF7ED] p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#F59E0B]">
+                <AlertTriangle className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="font-black text-[#9A3412]">현재가 갱신 일부 실패</p>
+                <p className="mt-1 truncate text-sm font-semibold text-[#C2410C]">
+                  {error?.message ?? data?.errors?.[0] ?? "일부 종목은 마지막 성공 가격을 유지합니다."}
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" onClick={onOpenDetails}>
+              자세히 보기
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ConnectedServicesCard({ token, onConnectAccount }: { token: string; onConnectAccount: () => void }) {
+  const [activeService, setActiveService] = useState<BrokerKey | null>(null);
+  const tossQuery = useQuery({ queryKey: ["toss-credentials"], queryFn: () => api.tossCredentials(token) });
+  const namuhQuery = useQuery({ queryKey: ["settings", "namuh-credentials"], queryFn: () => api.namuhCredentials(token) });
+  const kiwoomQuery = useQuery({ queryKey: ["settings", "kiwoom-credentials"], queryFn: () => api.kiwoomCredentials(token) });
+
+  const tossAccounts = tossQuery.data ?? [];
+  const namuhProfiles = namuhQuery.data ?? [];
+  const kiwoomProfiles = kiwoomQuery.data ?? [];
+  const services = [
+    {
+      broker: "TOSS" as BrokerKey,
+      title: "토스증권 API",
+      description: "토스 계좌별 Open API 키를 저장하고 키를 동기화합니다.",
+      status: serviceStatus(tossAccounts.some((account) => account.credential), tossAccounts.some((account) => account.credential?.status === "ERROR")),
+      meta: tossAccounts.length ? `${tossAccounts.length}개 계좌 · ${latestDate(tossAccounts.map((account) => account.credential?.lastUsedAt ?? account.credential?.updatedAt))}` : "등록된 토스 계좌 없음",
+      summary: tossAccounts[0]
+        ? `${tossAccounts[0].accountType} · 저장 상태 ${tossAccounts[0].credential?.secretPreview ?? "미저장"}`
+        : "설정 관리에서 계좌와 API 키를 추가하세요.",
+      loading: tossQuery.isLoading
+    },
+    {
+      broker: "NAMUH" as BrokerKey,
+      title: "나무증권 WMCA OpenAPI",
+      description: "나무 WMCA SDK 기반 연결 정보를 관리합니다.",
+      status: serviceStatus(namuhProfiles.length > 0, namuhProfiles.some((profile) => profile.status === "ERROR" || Boolean(profile.errorMessage))),
+      meta: namuhProfiles.length ? `${namuhProfiles.length}개 연결 · ${latestDate(namuhProfiles.map((profile) => profile.updatedAt))}` : "저장된 나무 연결 없음",
+      summary: namuhProfiles[0]
+        ? `${namuhProfiles[0].label} · ${namuhProfiles[0].environment === "REAL" ? "실전투자" : "모의투자"} · ${namuhProfiles[0].certificateMode === "PC" ? "PC 저장 공동인증서" : "클라우드 공동인증서"}`
+        : "설정 관리에서 인증 정보를 저장하세요.",
+      loading: namuhQuery.isLoading
+    },
+    {
+      broker: "KIWOOM" as BrokerKey,
+      title: "키움증권 REST API",
+      description: "키움 API 키와 연결 계좌를 관리합니다.",
+      status: serviceStatus(kiwoomProfiles.length > 0, kiwoomProfiles.some((profile) => profile.status === "ERROR")),
+      meta: kiwoomProfiles.length ? `${kiwoomProfiles.length}개 키 · ${latestDate(kiwoomProfiles.map((profile) => profile.updatedAt))}` : "저장된 키움 키 없음",
+      summary: kiwoomProfiles[0] ? `${kiwoomProfiles[0].label} · ${kiwoomProfiles[0].useMock ? "모의투자" : "실전투자"} · ${kiwoomProfiles[0].appKeyPreview}` : "설정 관리에서 API 키를 저장하세요.",
+      loading: kiwoomQuery.isLoading
+    }
+  ];
+
+  return (
+    <Card className="rounded-2xl border-[#E5EAF0] bg-white shadow-sm">
+      <CardHeader className="px-6 pt-6">
+        <div>
+          <CardTitle className="text-[20px] font-black text-[#0F172A]">연결된 계좌 서비스</CardTitle>
+          <p className="mt-2 text-sm font-semibold text-[#64748B]">민감한 API 정보는 설정 관리 화면에서만 수정할 수 있습니다.</p>
+        </div>
+        <Button onClick={onConnectAccount}>
+          <Plus className="h-4 w-4" />
+          계좌 연결하기
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-3 px-6 pb-6">
+        {services.map((service) => (
+          <BrokerServiceRow key={service.broker} service={service} onManage={() => setActiveService(service.broker)} />
+        ))}
+        <button
+          type="button"
+          className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[#C8D4E4] bg-[#FBFDFF] px-5 py-6 text-center transition hover:border-[#2563EB] hover:bg-[#EFF6FF]"
+          onClick={onConnectAccount}
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#2563EB] shadow-sm">
+            <Plus className="h-5 w-5" />
+          </span>
+          <span className="text-sm font-black text-[#0F172A]">계좌 연결 추가</span>
+          <span className="text-xs font-semibold text-[#64748B]">토스증권, 나무증권, 키움증권, CSV/XLSX 업로드를 연결할 수 있습니다.</span>
+        </button>
+      </CardContent>
+      <SettingsModal open={activeService === "TOSS"} title="토스증권 API 설정 관리" onClose={() => setActiveService(null)}>
+        <TossCredentialManager token={token} />
+      </SettingsModal>
+      <SettingsModal open={activeService === "NAMUH"} title="나무증권 WMCA 설정 관리" onClose={() => setActiveService(null)}>
+        <NamuhCredentialManager token={token} />
+      </SettingsModal>
+      <SettingsModal open={activeService === "KIWOOM"} title="키움증권 REST API 설정 관리" onClose={() => setActiveService(null)}>
+        <KiwoomCredentialManager token={token} />
+      </SettingsModal>
+    </Card>
+  );
+}
+
+function BrokerServiceRow({
+  service,
+  onManage
+}: {
+  service: {
+    broker: BrokerKey;
+    title: string;
+    description: string;
+    status: "ACTIVE" | "ERROR" | "INACTIVE";
+    meta: string;
+    summary: string;
+    loading: boolean;
+  };
+  onManage: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4 rounded-2xl border border-[#E5EAF0] bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)] md:flex-row md:items-center md:justify-between">
+      <div className="flex min-w-0 gap-4">
+        <BrokerServiceIcon broker={service.broker} />
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-base font-black text-[#0F172A]">{service.title}</p>
+            <StatusBadge status={service.status} label={service.loading ? "확인 중" : statusLabel(service.status)} />
+          </div>
+          <p className="mt-1 text-sm font-semibold text-[#64748B]">{service.description}</p>
+          <p className="mt-3 truncate text-xs font-bold text-[#64748B]">{service.summary}</p>
+          <p className="mt-1 text-xs font-semibold text-[#94A3B8]">{service.meta}</p>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <Button variant="outline" onClick={onManage}>
+          설정 관리
+        </Button>
+        <Button size="icon" variant="ghost" aria-label={`${service.title} 더보기`} onClick={onManage}>
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AccountSettingsCard({ user, onLogout, onEdit }: { user: AuthUser | null; onLogout: () => void; onEdit: () => void }) {
   const displayName = user?.name?.trim() || "사용자";
   const initial = displayName.slice(0, 1).toUpperCase();
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="rounded-2xl border-[#E5EAF0] bg-white shadow-sm">
+      <CardHeader className="px-6 pt-6">
         <div>
-          <CardTitle>계정</CardTitle>
-          <p className="mt-2 text-sm font-semibold text-slate-500">로그인 계정과 세션 정보를 확인합니다.</p>
+          <CardTitle className="text-[20px] font-black text-[#0F172A]">계정 정보</CardTitle>
+          <p className="mt-2 text-sm font-semibold text-[#64748B]">로그인 계정과 프로필 정보를 확인합니다.</p>
         </div>
-        <Button variant="outline" onClick={onLogout}>
-          <LogOut className="h-4 w-4" />
-          로그아웃
-        </Button>
+        <Button variant="outline" onClick={onEdit}>정보 수정</Button>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-6 pb-6">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
           <div className="flex min-w-0 items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-blue-500 to-teal-400 text-xl font-black text-white">
@@ -3131,11 +3451,787 @@ function AccountSettingsCard({ user, onLogout }: { user: AuthUser | null; onLogo
           <div className="grid gap-2">
             <AccountInfoCell label="로그인 방식" value={user?.providers.map(providerLabel).join(", ") || "확인 중"} />
             <AccountInfoCell label="마지막 로그인" value={formatDateTime(user?.lastLoginAt)} />
+            <Button className="w-full" variant="outline" onClick={onLogout}>
+              <LogOut className="h-4 w-4" />
+              로그아웃
+            </Button>
           </div>
         </div>
       </CardContent>
     </Card>
   );
+}
+
+function SecuritySettingsCard({ user, onLogout, onOpenDetail }: { user: AuthUser | null; onLogout: () => void; onOpenDetail: (detail: SecurityDetail) => void }) {
+  const providers = user?.providers.map(providerLabel).join(", ") || "확인 중";
+  const rows = [
+    {
+      icon: LockKeyhole,
+      title: "비밀번호",
+      description: "소셜 로그인 계정으로 인증합니다.",
+      action: () => onOpenDetail({ title: "비밀번호", description: "INVEST HUB는 현재 카카오/네이버 소셜 로그인을 사용합니다. 비밀번호 변경은 각 소셜 계정 보안 설정에서 진행해주세요." })
+    },
+    {
+      icon: ShieldCheck,
+      title: "2단계 인증",
+      description: "소셜 계정의 2단계 인증 상태를 따릅니다.",
+      action: () => onOpenDetail({ title: "2단계 인증", description: "서비스 자체 2단계 인증은 준비 중입니다. 지금은 카카오/네이버 계정의 2단계 인증을 켜두는 것을 권장합니다." })
+    },
+    {
+      icon: Clock3,
+      title: "최근 로그인 정보",
+      description: formatDateTime(user?.lastLoginAt),
+      action: () => onOpenDetail({ title: "최근 로그인 정보", description: `마지막 로그인 시각은 ${formatDateTime(user?.lastLoginAt)}입니다. 낯선 활동이 보이면 로그아웃 후 소셜 계정 보안을 확인해주세요.` })
+    },
+    {
+      icon: UserRound,
+      title: "연결된 소셜 계정",
+      description: providers,
+      action: () => onOpenDetail({ title: "연결된 소셜 계정", description: `현재 연결된 로그인 방식은 ${providers}입니다.` })
+    }
+  ];
+
+  return (
+    <Card className="rounded-2xl border-[#E5EAF0] bg-white shadow-sm">
+      <CardHeader className="px-6 pt-6">
+        <div>
+          <CardTitle className="text-[20px] font-black text-[#0F172A]">보안 설정</CardTitle>
+          <p className="mt-2 text-sm font-semibold text-[#64748B]">세션과 로그인 보안 상태를 확인합니다.</p>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2 px-6 pb-6">
+        {rows.map((row) => {
+          const Icon = row.icon;
+          return (
+            <button
+              key={row.title}
+              type="button"
+              className="flex w-full items-center gap-4 rounded-2xl border border-transparent p-3 text-left transition hover:border-[#E5EAF0] hover:bg-[#F8FAFC]"
+              onClick={row.action}
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#EFF6FF] text-[#2563EB]">
+                <Icon className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-black text-[#0F172A]">{row.title}</span>
+                <span className="mt-1 block truncate text-xs font-semibold text-[#64748B]">{row.description}</span>
+              </span>
+              <ChevronRight className="h-4 w-4 text-[#94A3B8]" />
+            </button>
+          );
+        })}
+        <Button className="mt-3 w-full" variant="outline" onClick={onLogout}>
+          <LogOut className="h-4 w-4" />
+          현재 세션 로그아웃
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function NotificationSettingsCard({ settings, onToggle }: { settings: NotificationSettings; onToggle: (key: keyof NotificationSettings) => void }) {
+  const rows: Array<{ key: keyof NotificationSettings; title: string; description: string }> = [
+    { key: "price", title: "가격 변동 알림", description: "보유 종목의 급격한 가격 변동을 알려드립니다." },
+    { key: "rebalance", title: "리밸런싱 알림", description: "목표 비중과 현재 비중 차이가 커질 때 알려드립니다." },
+    { key: "dividend", title: "배당 일정 알림", description: "예정된 배당 지급일과 권리락 일정을 알려드립니다." },
+    { key: "fx", title: "환율 알림", description: "USD/KRW 변동과 환율 영향도를 알려드립니다." },
+    { key: "fearGreed", title: "공포탐욕지수 알림", description: "과열 또는 공포 구간 진입을 알려드립니다." }
+  ];
+
+  return (
+    <Card className="rounded-2xl border-[#E5EAF0] bg-white shadow-sm">
+      <CardHeader className="px-6 pt-6">
+        <div>
+          <CardTitle className="text-[20px] font-black text-[#0F172A]">알림 설정</CardTitle>
+          <p className="mt-2 text-sm font-semibold text-[#64748B]">투자 판단에 필요한 알림만 선택하세요.</p>
+        </div>
+      </CardHeader>
+      <CardContent className="divide-y divide-[#E5EAF0] px-6 pb-6">
+        {rows.map((row) => (
+          <div key={row.key} className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
+            <div className="min-w-0">
+              <p className="font-black text-[#0F172A]">{row.title}</p>
+              <p className="mt-1 text-sm font-semibold text-[#64748B]">{row.description}</p>
+            </div>
+            <SettingSwitch checked={settings[row.key]} onChange={() => onToggle(row.key)} label={row.title} />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MiscSettingsCard({
+  language,
+  onLanguageChange,
+  refreshInterval,
+  onRefreshIntervalChange,
+  targets,
+  setTargets,
+  onSaveTargets,
+  onResetTargets,
+  savingTargets,
+  targetsLoading
+}: {
+  language: string;
+  onLanguageChange: (value: string) => void;
+  refreshInterval: number;
+  onRefreshIntervalChange: (value: number) => void;
+  targets: PortfolioTargetInput[];
+  setTargets: (targets: PortfolioTargetInput[]) => void;
+  onSaveTargets: () => void;
+  onResetTargets: () => void;
+  savingTargets: boolean;
+  targetsLoading: boolean;
+}) {
+  return (
+    <Card className="rounded-2xl border-[#E5EAF0] bg-white shadow-sm">
+      <CardHeader className="px-6 pt-6">
+        <div>
+          <CardTitle className="text-[20px] font-black text-[#0F172A]">기타 설정</CardTitle>
+          <p className="mt-2 text-sm font-semibold text-[#64748B]">화면, 언어, 자동 갱신과 리밸런싱 기준을 관리합니다.</p>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4 px-6 pb-6">
+        <div className="grid gap-3 md:grid-cols-2">
+          <SettingField icon={<Settings className="h-4 w-4" />} label="테마 설정" description="라이트, 다크, 시스템 테마를 선택합니다.">
+            <ThemeToggle />
+          </SettingField>
+          <SettingField icon={<Globe2 className="h-4 w-4" />} label="언어 설정" description="서비스 표시 언어를 선택합니다.">
+            <select
+              className="h-10 rounded-xl border border-[#E5EAF0] bg-white px-3 text-sm font-bold text-[#0F172A]"
+              value={language}
+              onChange={(event) => onLanguageChange(event.target.value)}
+            >
+              <option value="ko">한국어</option>
+              <option value="en">English</option>
+            </select>
+          </SettingField>
+          <SettingField icon={<RefreshCw className="h-4 w-4" />} label="데이터 새로고침 주기" description="현재가 자동 갱신 간격을 조정합니다.">
+            <select
+              className="h-10 rounded-xl border border-[#E5EAF0] bg-white px-3 text-sm font-bold text-[#0F172A]"
+              value={refreshInterval}
+              onChange={(event) => onRefreshIntervalChange(Number(event.target.value))}
+            >
+              <option value={45_000}>45초</option>
+              <option value={60_000}>1분</option>
+              <option value={180_000}>3분</option>
+              <option value={300_000}>5분</option>
+              <option value={900_000}>15분</option>
+            </select>
+          </SettingField>
+          <div className="rounded-2xl border border-[#FECACA] bg-[#FEF2F2] p-4">
+            <p className="text-sm font-black text-[#B91C1C]">계정 탈퇴</p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-[#EF4444]">계정 삭제는 개인정보와 연결 데이터를 모두 제거하므로 고객 지원 확인 후 진행됩니다.</p>
+          </div>
+        </div>
+        <details className="rounded-2xl border border-[#E5EAF0] bg-[#F8FAFC] p-4">
+          <summary className="cursor-pointer text-sm font-black text-[#0F172A]">리밸런싱 목표 비중 설정</summary>
+          <div className="mt-4 space-y-3">
+            {targetsLoading ? <p className="text-sm font-semibold text-[#64748B]">목표 비중을 불러오는 중입니다.</p> : null}
+            {targets.map((target, index) => (
+              <div key={target.targetKey} className="grid items-center gap-3 rounded-xl bg-white p-4 md:grid-cols-[160px_1fr_90px]">
+                <p className="font-bold text-slate-900">{target.targetKey}</p>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={target.targetWeight}
+                  onChange={(event) => {
+                    const next = [...targets];
+                    next[index] = { ...target, targetWeight: Number(event.target.value) };
+                    setTargets(next);
+                  }}
+                />
+                <Input
+                  type="number"
+                  value={target.targetWeight}
+                  onChange={(event) => {
+                    const next = [...targets];
+                    next[index] = { ...target, targetWeight: Number(event.target.value) };
+                    setTargets(next);
+                  }}
+                />
+              </div>
+            ))}
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={onSaveTargets} disabled={savingTargets}>
+                {savingTargets ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                목표 비중 저장
+              </Button>
+              <Button variant="outline" onClick={onResetTargets}>
+                기본값 복원
+              </Button>
+            </div>
+          </div>
+        </details>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TossCredentialManager({ token }: { token: string }) {
+  const { notify } = useToast();
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ["toss-credentials"], queryFn: () => api.tossCredentials(token) });
+  const [drafts, setDrafts] = useState<Record<string, { clientId: string; clientSecret: string }>>({});
+
+  useEffect(() => {
+    if (!query.data) return;
+    setDrafts((current) => {
+      const next = { ...current };
+      for (const account of query.data) {
+        next[account.accountId] = next[account.accountId] ?? {
+          clientId: account.credential?.clientId ?? "",
+          clientSecret: ""
+        };
+        if (!next[account.accountId].clientId && account.credential?.clientId) {
+          next[account.accountId] = { ...next[account.accountId], clientId: account.credential.clientId };
+        }
+      }
+      return next;
+    });
+  }, [query.data]);
+
+  const createAccount = useMutation({
+    mutationFn: () => {
+      const accountAlias = window.prompt("추가할 토스 계좌 별칭을 입력하세요.", "토스증권 추가 계좌");
+      if (!accountAlias) throw new Error("계좌 별칭을 입력해야 합니다.");
+      return api.createTossAccount({ accountAlias }, token);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["toss-credentials"] });
+      notify({ kind: "success", title: "토스 계좌 추가", description: "설정에서 API 키를 입력할 수 있습니다." });
+    },
+    onError: (error) => notify({ kind: "error", title: "계좌 추가 실패", description: (error as Error).message })
+  });
+
+  const saveCredential = useMutation({
+    mutationFn: (account: TossCredentialAccount) => {
+      const draft = drafts[account.accountId];
+      if (!draft?.clientId) throw new Error("client_id를 입력하세요.");
+      if (!account.credential && !draft.clientSecret) throw new Error("처음 저장할 때는 client_secret이 필요합니다.");
+      return api.saveTossCredential(
+        {
+          accountId: account.accountId,
+          clientId: draft.clientId,
+          clientSecret: draft.clientSecret || undefined
+        },
+        token
+      );
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["toss-credentials"] });
+      setDrafts((current) => Object.fromEntries(Object.entries(current).map(([accountId, draft]) => [accountId, { ...draft, clientSecret: "" }])));
+      notify({ kind: "success", title: "토스 API 키 저장", description: "계좌별 키가 DB에 암호화되어 저장되었습니다." });
+    },
+    onError: (error) => notify({ kind: "error", title: "키 저장 실패", description: (error as Error).message })
+  });
+
+  const deleteCredential = useMutation({
+    mutationFn: (accountId: string) => api.deleteTossCredential(accountId, token),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["toss-credentials"] });
+      notify({ kind: "success", title: "토스 API 키 삭제", description: "저장된 계좌 키를 삭제했습니다." });
+    },
+    onError: (error) => notify({ kind: "error", title: "키 삭제 실패", description: (error as Error).message })
+  });
+
+  const syncAccount = useMutation({
+    mutationFn: (accountId: string) => api.syncToss({ accountId }, token),
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries();
+      notify({ kind: "success", title: "토스 계좌 동기화 완료", description: `${data.accounts}개 계좌, ${data.saved}개 종목을 저장했습니다.` });
+    },
+    onError: (error) => notify({ kind: "error", title: "토스 동기화 실패", description: (error as Error).message })
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <p className="text-sm font-semibold leading-6 text-slate-600">client_id와 client_secret은 이 창에서만 수정합니다. 저장 후 secret은 마스킹됩니다.</p>
+        <Button variant="outline" onClick={() => createAccount.mutate()} disabled={createAccount.isPending}>
+          {createAccount.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          토스 계좌 추가
+        </Button>
+      </div>
+      {query.isLoading ? <LoadingState label="토스 계좌 설정을 불러오고 있습니다." /> : null}
+      {query.isError ? <ErrorState message={(query.error as Error).message} onRetry={() => query.refetch()} /> : null}
+      {query.data && query.data.length === 0 ? <EmptyState title="토스 계좌가 없습니다." description="토스 계좌 추가 버튼으로 API 키를 저장할 계좌를 만드세요." /> : null}
+      {query.data?.map((account) => {
+        const draft = drafts[account.accountId] ?? { clientId: account.credential?.clientId ?? "", clientSecret: "" };
+        return (
+          <div key={account.accountId} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-base font-black text-slate-950">{account.accountAlias}</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">
+                  {account.accountType} · 외부 계좌 ID {account.externalAccountId ?? "동기화 후 자동 입력"}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">저장 상태: {account.credential ? `${account.credential.secretPreview} · ${account.credential.status}` : "저장된 키 없음"}</p>
+              </div>
+              <StatusBadge status={account.credential?.status ?? "INACTIVE"} label={statusLabel(account.credential?.status ?? "INACTIVE")} />
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="block text-sm font-bold text-slate-700">
+                client_id
+                <Input
+                  className="mt-2"
+                  value={draft.clientId}
+                  onChange={(event) => setDrafts((current) => ({ ...current, [account.accountId]: { ...draft, clientId: event.target.value } }))}
+                />
+              </label>
+              <SensitiveInput
+                label="client_secret"
+                value={draft.clientSecret}
+                placeholder={account.credential ? "변경할 때만 입력" : "필수 입력"}
+                onChange={(value) => setDrafts((current) => ({ ...current, [account.accountId]: { ...draft, clientSecret: value } }))}
+              />
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button onClick={() => saveCredential.mutate(account)} disabled={saveCredential.isPending}>
+                {saveCredential.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                저장
+              </Button>
+              <Button variant="outline" onClick={() => syncAccount.mutate(account.accountId)} disabled={!account.credential || syncAccount.isPending}>
+                {syncAccount.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                동기화 테스트
+              </Button>
+              <Button className="border-red-200 text-red-600 hover:bg-red-50" variant="outline" onClick={() => deleteCredential.mutate(account.accountId)} disabled={!account.credential || deleteCredential.isPending}>
+                연결 해제
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function NamuhCredentialManager({ token }: { token: string }) {
+  const { notify } = useToast();
+  const queryClient = useQueryClient();
+  const profilesQuery = useQuery({ queryKey: ["settings", "namuh-credentials"], queryFn: () => api.namuhCredentials(token) });
+  const [draft, setDraft] = useState({
+    connectionId: "",
+    label: "",
+    loginId: "",
+    loginPassword: "",
+    certificatePassword: "",
+    accountPassword: "",
+    certificateMode: "PC" as "PC" | "CLOUD",
+    environment: "REAL" as "REAL" | "MOCK"
+  });
+  const [discoveredAccounts, setDiscoveredAccounts] = useState<Record<string, Array<{ brokerAccountNo: string | null; accountAlias: string }>>>({});
+
+  function resetDraft() {
+    setDraft({ connectionId: "", label: "", loginId: "", loginPassword: "", certificatePassword: "", accountPassword: "", certificateMode: "PC", environment: "REAL" });
+  }
+
+  function editProfile(profile: NamuhCredentialProfile) {
+    setDraft({
+      connectionId: profile.connectionId,
+      label: profile.label,
+      loginId: profile.loginId ?? "",
+      loginPassword: "",
+      certificatePassword: "",
+      accountPassword: "",
+      certificateMode: profile.certificateMode,
+      environment: profile.environment
+    });
+    notify({ kind: "info", title: "나무 설정 편집", description: `${profile.label} 정보를 편집합니다.` });
+  }
+
+  const saveProfile = useMutation({
+    mutationFn: () => {
+      if (!draft.label.trim()) throw new Error("나무 연결 이름을 입력하세요.");
+      if (!draft.loginId.trim()) throw new Error("나무 ID를 입력하세요.");
+      if (!draft.connectionId && (!draft.loginPassword.trim() || !draft.certificatePassword.trim() || !draft.accountPassword.trim())) {
+        throw new Error("새 나무 연결에는 ID 비밀번호, 인증서 비밀번호, 계좌 비밀번호가 모두 필요합니다.");
+      }
+      return api.saveNamuhCredentialProfile(
+        {
+          connectionId: draft.connectionId || undefined,
+          label: draft.label.trim(),
+          loginId: draft.loginId.trim(),
+          loginPassword: draft.loginPassword.trim() || undefined,
+          certificatePassword: draft.certificatePassword.trim() || undefined,
+          accountPassword: draft.accountPassword.trim() || undefined,
+          certificateMode: draft.certificateMode,
+          environment: draft.environment
+        },
+        token
+      );
+    },
+    onSuccess: async () => {
+      resetDraft();
+      await queryClient.invalidateQueries({ queryKey: ["settings", "namuh-credentials"] });
+      await queryClient.invalidateQueries({ queryKey: ["brokers", "namuh"] });
+      notify({ kind: "success", title: "나무 WMCA 정보 저장", description: "로그인 정보를 암호화 저장했습니다." });
+    },
+    onError: (error) => notify({ kind: "error", title: "나무 정보 저장 실패", description: (error as Error).message })
+  });
+
+  const deleteProfile = useMutation({
+    mutationFn: (connectionId: string) => api.deleteNamuhCredentialProfile(connectionId, token),
+    onSuccess: async () => {
+      resetDraft();
+      await queryClient.invalidateQueries({ queryKey: ["settings", "namuh-credentials"] });
+      await queryClient.invalidateQueries({ queryKey: ["brokers", "namuh"] });
+      await queryClient.invalidateQueries({ queryKey: ["broker", "NAMUH"] });
+      notify({ kind: "success", title: "나무 연결 삭제", description: "저장된 로그인 정보와 계좌 연결을 삭제했습니다." });
+    },
+    onError: (error) => notify({ kind: "error", title: "나무 연결 삭제 실패", description: (error as Error).message })
+  });
+
+  const connectProfile = useMutation({
+    mutationFn: (payload: { credentialId: string; accountNo?: string; accountNos?: string[] }) => api.connectNamuh(payload, token),
+    onSuccess: async (data) => {
+      if (data.credentialId) setDiscoveredAccounts((current) => ({ ...current, [data.credentialId ?? ""]: data.accounts }));
+      await queryClient.invalidateQueries({ queryKey: ["settings", "namuh-credentials"] });
+      await queryClient.invalidateQueries({ queryKey: ["brokers", "namuh"] });
+      await queryClient.invalidateQueries({ queryKey: ["broker", "NAMUH"] });
+      notify({ kind: data.connected ? "success" : "info", title: "나무 계좌 조회", description: data.message });
+    },
+    onError: (error) => notify({ kind: "error", title: "나무 계좌 조회 실패", description: (error as Error).message })
+  });
+
+  const profiles = profilesQuery.data ?? [];
+
+  return (
+    <div className="space-y-4">
+      {profilesQuery.isLoading ? <LoadingState label="나무 연결 정보를 불러오고 있습니다." /> : null}
+      {profilesQuery.isError ? <ErrorState message={(profilesQuery.error as Error).message} onRetry={() => profilesQuery.refetch()} /> : null}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="grid gap-3 md:grid-cols-[180px_1fr_1fr]">
+          <label className="block text-sm font-bold text-slate-700">
+            연결 이름
+            <Input className="mt-2" value={draft.label} placeholder="예: 나무 주계좌" onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))} />
+          </label>
+          <label className="block text-sm font-bold text-slate-700">
+            나무 ID
+            <Input className="mt-2" value={draft.loginId} placeholder="나무/NH 온라인 ID" onChange={(event) => setDraft((current) => ({ ...current, loginId: event.target.value }))} />
+          </label>
+          <SensitiveInput label="ID 비밀번호" value={draft.loginPassword} placeholder={draft.connectionId ? "변경할 때만 입력" : "필수 입력"} onChange={(value) => setDraft((current) => ({ ...current, loginPassword: value }))} />
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <SensitiveInput label="공동인증서 비밀번호" value={draft.certificatePassword} placeholder={draft.connectionId ? "변경할 때만 입력" : "필수 입력"} onChange={(value) => setDraft((current) => ({ ...current, certificatePassword: value }))} />
+          <SensitiveInput label="계좌 비밀번호" value={draft.accountPassword} placeholder={draft.connectionId ? "변경할 때만 입력" : "필수 입력"} onChange={(value) => setDraft((current) => ({ ...current, accountPassword: value }))} />
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <label className="block text-sm font-bold text-slate-700">
+            인증서 위치
+            <select className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold" value={draft.certificateMode} onChange={(event) => setDraft((current) => ({ ...current, certificateMode: event.target.value as "PC" | "CLOUD" }))}>
+              <option value="PC">PC 저장 공동인증서</option>
+              <option value="CLOUD">클라우드 공동인증서</option>
+            </select>
+          </label>
+          <label className="block text-sm font-bold text-slate-700">
+            투자 환경
+            <select className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold" value={draft.environment} onChange={(event) => setDraft((current) => ({ ...current, environment: event.target.value as "REAL" | "MOCK" }))}>
+              <option value="REAL">실전투자</option>
+              <option value="MOCK">모의투자</option>
+            </select>
+          </label>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button onClick={() => saveProfile.mutate()} disabled={saveProfile.isPending}>
+            {saveProfile.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Settings className="h-4 w-4" />}
+            {draft.connectionId ? "나무 연결 수정" : "나무 연결 저장"}
+          </Button>
+          <Button variant="ghost" onClick={resetDraft}>입력 초기화</Button>
+        </div>
+      </div>
+      {profiles.length === 0 && !profilesQuery.isLoading ? <EmptyState title="저장된 나무 연결이 없습니다." description="나무 ID와 인증 정보를 저장한 뒤 계좌를 조회하세요." /> : null}
+      <div className="grid gap-4">
+        {profiles.map((profile) => (
+          <NamuhCredentialProfileCard
+            key={profile.connectionId}
+            profile={profile}
+            discoveredAccounts={discoveredAccounts[profile.connectionId] ?? []}
+            loading={connectProfile.isPending || deleteProfile.isPending}
+            onEdit={() => editProfile(profile)}
+            onDelete={() => deleteProfile.mutate(profile.connectionId)}
+            onLookup={() => connectProfile.mutate({ credentialId: profile.connectionId })}
+            onRegister={(accountNo) => connectProfile.mutate({ credentialId: profile.connectionId, accountNo })}
+            onRegisterAll={(accountNos) => connectProfile.mutate({ credentialId: profile.connectionId, accountNos })}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function KiwoomCredentialManager({ token }: { token: string }) {
+  const { notify } = useToast();
+  const queryClient = useQueryClient();
+  const profilesQuery = useQuery({ queryKey: ["settings", "kiwoom-credentials"], queryFn: () => api.kiwoomCredentials(token) });
+  const [draft, setDraft] = useState({ connectionId: "", label: "", appKey: "", secretKey: "", useMock: false });
+  const [discoveredAccounts, setDiscoveredAccounts] = useState<Record<string, Array<{ brokerAccountNo: string | null; accountAlias: string }>>>({});
+
+  function resetDraft() {
+    setDraft({ connectionId: "", label: "", appKey: "", secretKey: "", useMock: false });
+  }
+
+  function editProfile(profile: KiwoomCredentialProfile) {
+    setDraft({ connectionId: profile.connectionId, label: profile.label, appKey: profile.appKey ?? "", secretKey: "", useMock: profile.useMock });
+    notify({ kind: "info", title: "키 수정", description: `${profile.label} 정보를 편집합니다.` });
+  }
+
+  const saveProfile = useMutation({
+    mutationFn: () => {
+      if (!draft.label.trim()) throw new Error("키 이름을 입력하세요.");
+      if (!draft.appKey.trim()) throw new Error("키움 App Key를 입력하세요.");
+      if (!draft.connectionId && !draft.secretKey.trim()) throw new Error("새 키를 추가할 때는 Secret Key가 필요합니다.");
+      return api.saveKiwoomCredentialProfile({ connectionId: draft.connectionId || undefined, label: draft.label.trim(), appKey: draft.appKey.trim(), secretKey: draft.secretKey.trim() || undefined, useMock: draft.useMock }, token);
+    },
+    onSuccess: async () => {
+      resetDraft();
+      await queryClient.invalidateQueries({ queryKey: ["settings", "kiwoom-credentials"] });
+      await queryClient.invalidateQueries({ queryKey: ["brokers", "kiwoom"] });
+      notify({ kind: "success", title: "키움 API 키 저장", description: "키 프로필을 암호화 저장했습니다." });
+    },
+    onError: (error) => notify({ kind: "error", title: "키 저장 실패", description: (error as Error).message })
+  });
+
+  const deleteProfile = useMutation({
+    mutationFn: (connectionId: string) => api.deleteKiwoomCredentialProfile(connectionId, token),
+    onSuccess: async () => {
+      resetDraft();
+      await queryClient.invalidateQueries({ queryKey: ["settings", "kiwoom-credentials"] });
+      await queryClient.invalidateQueries({ queryKey: ["brokers", "kiwoom"] });
+      await queryClient.invalidateQueries({ queryKey: ["broker", "KIWOOM"] });
+      notify({ kind: "success", title: "키움 API 키 삭제", description: "키와 연결 토큰을 삭제했습니다." });
+    },
+    onError: (error) => notify({ kind: "error", title: "키 저장 실패", description: (error as Error).message })
+  });
+
+  const connectProfile = useMutation({
+    mutationFn: (payload: { credentialId: string; accountNo?: string; accountNos?: string[] }) => api.connectKiwoom(payload, token),
+    onSuccess: async (data) => {
+      if (data.credentialId) setDiscoveredAccounts((current) => ({ ...current, [data.credentialId ?? ""]: data.accounts }));
+      await queryClient.invalidateQueries({ queryKey: ["settings", "kiwoom-credentials"] });
+      await queryClient.invalidateQueries({ queryKey: ["brokers", "kiwoom"] });
+      await queryClient.invalidateQueries({ queryKey: ["broker", "KIWOOM"] });
+      notify({ kind: data.connected ? "success" : "info", title: "키움 계좌 조회", description: data.message });
+    },
+    onError: (error) => notify({ kind: "error", title: "키움 계좌 조회 실패", description: (error as Error).message })
+  });
+
+  const profiles = profilesQuery.data ?? [];
+
+  return (
+    <div className="space-y-4">
+      {profilesQuery.isLoading ? <LoadingState label="키움 API 키 목록을 불러오고 있습니다." /> : null}
+      {profilesQuery.isError ? <ErrorState message={(profilesQuery.error as Error).message} onRetry={() => profilesQuery.refetch()} /> : null}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="grid gap-3 md:grid-cols-[180px_1fr_1fr]">
+          <label className="block text-sm font-bold text-slate-700">
+            키 이름
+            <Input className="mt-2" value={draft.label} placeholder="예: 실전 주계좌" onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))} />
+          </label>
+          <label className="block text-sm font-bold text-slate-700">
+            App Key
+            <Input className="mt-2" value={draft.appKey} placeholder="키움 Open API App Key" onChange={(event) => setDraft((current) => ({ ...current, appKey: event.target.value }))} />
+          </label>
+          <SensitiveInput label="Secret Key" value={draft.secretKey} placeholder={draft.connectionId ? "변경할 때만 입력" : "새 키 추가 시 필수"} onChange={(value) => setDraft((current) => ({ ...current, secretKey: value }))} />
+        </div>
+        <label className="mt-3 flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-700">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-slate-300" checked={draft.useMock} onChange={(event) => setDraft((current) => ({ ...current, useMock: event.target.checked }))} />
+          <span>
+            모의투자 API 사용
+            <span className="mt-1 block text-xs font-medium leading-5 text-slate-500">실전 App Key면 해제, 모의투자 App Key면 체크하세요.</span>
+          </span>
+        </label>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button onClick={() => saveProfile.mutate()} disabled={saveProfile.isPending}>
+            {saveProfile.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Settings className="h-4 w-4" />}
+            {draft.connectionId ? "키 수정 저장" : "키 추가 저장"}
+          </Button>
+          <Button variant="ghost" onClick={resetDraft}>입력 초기화</Button>
+        </div>
+      </div>
+      {profiles.length === 0 && !profilesQuery.isLoading ? <EmptyState title="저장된 키움 API 키가 없습니다." description="실전/모의 구분에 맞춰 키를 추가한 뒤 계좌를 조회하세요." /> : null}
+      <div className="grid gap-4">
+        {profiles.map((profile) => (
+          <KiwoomCredentialProfileCard
+            key={profile.connectionId}
+            profile={profile}
+            discoveredAccounts={discoveredAccounts[profile.connectionId] ?? []}
+            loading={connectProfile.isPending || deleteProfile.isPending}
+            onEdit={() => editProfile(profile)}
+            onDelete={() => deleteProfile.mutate(profile.connectionId)}
+            onLookup={() => connectProfile.mutate({ credentialId: profile.connectionId })}
+            onRegister={(accountNo) => connectProfile.mutate({ credentialId: profile.connectionId, accountNo })}
+            onRegisterAll={(accountNos) => connectProfile.mutate({ credentialId: profile.connectionId, accountNos })}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SettingsModal({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="max-h-[86vh] w-full max-w-[860px] overflow-y-auto rounded-3xl border border-[#E5EAF0] bg-white p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <h3 className="text-xl font-black text-[#0F172A]">{title}</h3>
+          <Button size="icon" variant="ghost" onClick={onClose} aria-label="닫기">
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function SensitiveInput({ label, value, placeholder, onChange }: { label: string; value: string; placeholder?: string; onChange: (value: string) => void }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <label className="block text-sm font-bold text-slate-700">
+      {label}
+      <span className="mt-2 flex h-10 items-center rounded-lg border border-slate-200 bg-white">
+        <input
+          className="min-w-0 flex-1 bg-transparent px-3 text-sm font-semibold outline-none"
+          type={visible ? "text" : "password"}
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <button type="button" className="flex h-10 w-10 items-center justify-center text-slate-500" onClick={() => setVisible((current) => !current)} aria-label={`${label} 보기 전환`}>
+          {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </span>
+    </label>
+  );
+}
+
+function SettingSwitch({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      className={cn("relative h-7 w-12 shrink-0 rounded-full transition", checked ? "bg-[#2563EB]" : "bg-[#CBD5E1]")}
+      onClick={onChange}
+    >
+      <span className={cn("absolute top-1 h-5 w-5 rounded-full bg-white shadow transition", checked ? "left-6" : "left-1")} />
+    </button>
+  );
+}
+
+function SettingField({ icon, label, description, children }: { icon: ReactNode; label: string; description: string; children: ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-[#E5EAF0] bg-[#F8FAFC] p-4">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#2563EB] shadow-sm">{icon}</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-[#0F172A]">{label}</p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-[#64748B]">{description}</p>
+          <div className="mt-3">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PriceRefreshDetailPanel({ data, error }: { data?: PriceRefreshResult; error: Error | null }) {
+  const errors = [error?.message, ...(data?.errors ?? [])].filter(Boolean) as string[];
+  return (
+    <div className="space-y-3">
+      <InfoRow label="마지막 성공" value={formatDateTime(data?.lastSuccessAt)} />
+      <InfoRow label="요청/조회 종목" value={`${data?.symbolsRequested ?? 0}개 / ${data?.symbolsFetched ?? 0}개`} />
+      <InfoRow label="반영 종목" value={`${data?.holdingsUpdated ?? 0}개`} />
+      <InfoRow label="데이터 소스" value={data?.source ?? "확인 중"} />
+      {errors.length ? (
+        <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+          <p className="font-black text-orange-800">오류 내용</p>
+          <ul className="mt-2 space-y-1 text-sm font-semibold leading-6 text-orange-700">
+            {errors.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-700">최근 갱신 오류가 없습니다.</p>
+      )}
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <span className="text-sm font-bold text-slate-500">{label}</span>
+      <span className="numeric text-right text-sm font-black text-slate-950">{value}</span>
+    </div>
+  );
+}
+
+function BrokerServiceIcon({ broker }: { broker: BrokerKey }) {
+  if (broker === "TOSS") {
+    return (
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#EFF6FF] p-2">
+        <img src="/brokers/toss-symbol-primary.png" alt="" className="h-full w-full object-contain" loading="lazy" />
+      </span>
+    );
+  }
+  if (broker === "KIWOOM") {
+    return (
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#FDF2F8] p-2">
+        <img src="/brokers/kiwoom-ci-symbol.png" alt="" className="h-full w-full object-contain" loading="lazy" />
+      </span>
+    );
+  }
+  return <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22C55E] to-[#16A34A] text-lg font-black text-white">N</span>;
+}
+
+function StatusBadge({ status, label }: { status: "ACTIVE" | "ERROR" | "INACTIVE"; label: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-black",
+        status === "ACTIVE" && "bg-[#ECFDF5] text-[#16A34A]",
+        status === "ERROR" && "bg-[#FFF7ED] text-[#F59E0B]",
+        status === "INACTIVE" && "bg-[#F1F5F9] text-[#64748B]"
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function serviceStatus(connected: boolean, hasError: boolean): "ACTIVE" | "ERROR" | "INACTIVE" {
+  if (hasError) return "ERROR";
+  return connected ? "ACTIVE" : "INACTIVE";
+}
+
+function statusLabel(status: "ACTIVE" | "ERROR" | "INACTIVE") {
+  if (status === "ACTIVE") return "연결됨";
+  if (status === "ERROR") return "오류";
+  return "미연결";
+}
+
+function latestDate(values: Array<string | null | undefined>) {
+  const latest = values
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
+  return latest ? `마지막 동기화 ${formatDateTime(latest)}` : "마지막 동기화 없음";
+}
+
+function notificationLabel(key: keyof NotificationSettings) {
+  const labels: Record<keyof NotificationSettings, string> = {
+    price: "가격 변동",
+    rebalance: "리밸런싱",
+    dividend: "배당 일정",
+    fx: "환율",
+    fearGreed: "공포탐욕지수"
+  };
+  return labels[key];
 }
 
 function AccountInfoCell({ label, value }: { label: string; value: string }) {

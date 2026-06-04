@@ -41,11 +41,12 @@ export const api = {
       method: "POST",
       token
     }),
-  marketIndicators: () => request<MarketIndicatorsResult>("/api/market-indicators"),
-  exchangeRate: () => request<MarketIndicatorsResult>("/api/market-indicators/exchange-rate"),
-  refreshMarketIndicators: () =>
+  marketIndicators: (token?: string | null) => request<MarketIndicatorsResult>("/api/market-indicators", { token }),
+  exchangeRate: (token?: string | null) => request<MarketIndicatorsResult>("/api/market-indicators/exchange-rate", { token }),
+  refreshMarketIndicators: (token?: string | null) =>
     request<MarketIndicatorsResult>("/api/market-indicators/refresh", {
-      method: "POST"
+      method: "POST",
+      token
     }),
   securityLogo: (securityId: string, token?: string | null) =>
     request<SecurityLogoResult>(`/api/securities/${securityId}/logo`, { token }),
@@ -254,6 +255,8 @@ export type PortfolioSummary = {
     accounts: string[];
     totalQuantity: number;
     totalMarketValue: number;
+    profitLoss: number;
+    profitLossRate: number;
   }>;
   aiInsights: Array<{
     type: "warning" | "info" | "success";

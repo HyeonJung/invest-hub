@@ -27,7 +27,7 @@ export class PricesService {
   async refreshUserPrices(userId: string) {
     const startedAt = new Date();
     const marketSession = getMarketSession(startedAt);
-    const usdKrwRate = await this.marketIndicatorsService.getUsdKrwRate();
+    const usdKrwRate = await this.marketIndicatorsService.getUsdKrwRate(userId);
     const allHoldings = await this.prisma.holding.findMany({
       where: {
         account: { userId },

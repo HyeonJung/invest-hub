@@ -132,6 +132,19 @@ export class TossOpenApiService {
     return { accounts: accountsToSync.length, saved };
   }
 
+  async getUsdKrwRateForUser(userId: string) {
+    const credential = await this.resolveSavedCredential(userId);
+    if (!credential) return null;
+
+    const token = await this.issueToken(credential.clientId, credential.clientSecret);
+    const result = await this.fetchUsdKrwRate(token);
+    await this.prisma.accountApiCredential.update({
+      where: { id: credential.id },
+      data: { lastUsedAt: new Date(), status: "ACTIVE" }
+    });
+    return result;
+  }
+
   private async issueToken(clientId: string, clientSecret: string) {
     const body = new URLSearchParams({
       grant_type: "client_credentials",
@@ -159,12 +172,25 @@ export class TossOpenApiService {
 
   private async getUsdKrwRate(token: string) {
     try {
-      const json = await this.getJson("/api/v1/exchange-rate?baseCurrency=USD&quoteCurrency=KRW", token);
-      const rate = Number(json.result?.rate ?? 0);
-      return Number.isFinite(rate) && rate > 0 ? rate : FALLBACK_USD_KRW_RATE;
+      const result = await this.fetchUsdKrwRate(token);
+      return result.rate;
     } catch {
       return FALLBACK_USD_KRW_RATE;
     }
+  }
+
+  private async fetchUsdKrwRate(token: string) {
+    const json = await this.getJson("/api/v1/exchange-rate?baseCurrency=USD&quoteCurrency=KRW", token);
+    const rate = readExchangeRate(json);
+    if (!Number.isFinite(rate) || rate <= 0) {
+      throw new BadRequestException("토스증권 환율 응답이 올바르지 않습니다.");
+    }
+
+    return {
+      rate,
+      source: "TOSS_OPEN_API",
+      fetchedAt: new Date()
+    };
   }
 
   private async getJson(path: string, token: string, accountSeq?: string) {
@@ -220,6 +246,24 @@ export class TossOpenApiService {
     }
 
     return {
+      clientId: saved.clientId,
+      clientSecret: decryptCredentialSecret(saved.encryptedSecret)
+    };
+  }
+
+  private async resolveSavedCredential(userId: string) {
+    const saved = await this.prisma.accountApiCredential.findFirst({
+      where: {
+        userId,
+        broker: "TOSS",
+        status: "ACTIVE"
+      },
+      orderBy: { updatedAt: "desc" }
+    });
+    if (!saved) return null;
+
+    return {
+      id: saved.id,
       clientId: saved.clientId,
       clientSecret: decryptCredentialSecret(saved.encryptedSecret)
     };
@@ -337,6 +381,25 @@ function readMoney(value: any) {
   if (typeof value === "number") return value;
   if (typeof value === "string") return Number(value.replace(/[^0-9.-]/g, ""));
   return Number(value.amount ?? value.value ?? value.total ?? value.krw ?? value.usd ?? 0);
+}
+
+function readExchangeRate(value: any): number {
+  const candidates = [
+    value?.result?.rate,
+    value?.result?.exchangeRate,
+    value?.result?.baseRate,
+    value?.rate,
+    value?.exchangeRate,
+    value?.baseRate,
+    Array.isArray(value?.result) ? value.result[0]?.rate : undefined,
+    Array.isArray(value?.result) ? value.result[0]?.exchangeRate : undefined
+  ];
+
+  for (const candidate of candidates) {
+    const rate = readMoney(candidate);
+    if (Number.isFinite(rate) && rate > 0) return rate;
+  }
+  return 0;
 }
 
 function readRatePercent(value: any) {

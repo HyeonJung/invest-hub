@@ -145,15 +145,6 @@ textarea {
   box-shadow: 8px 0 30px rgba(15, 23, 42, 0.04);
 }
 
-.dashboard-right-panel {
-  background: rgba(255, 255, 255, 0.58);
-  border-color: var(--sidebar-border);
-}
-
-.dark .dashboard-right-panel {
-  background: #07111f;
-}
-
 .dashboard-main {
   background: transparent;
 }

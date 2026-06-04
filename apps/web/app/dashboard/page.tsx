@@ -9,7 +9,6 @@ import {
   Bell,
   BriefcaseBusiness,
   Building2,
-  CalendarDays,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -29,7 +28,6 @@ import {
   Search,
   Settings,
   ShieldCheck,
-  SlidersHorizontal,
   Upload,
   Wallet,
   X
@@ -73,6 +71,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { Input } from "@/components/ui/input";
+import {
+  DEFAULT_LOSS_STICKER_MODE,
+  DEFAULT_PROFIT_STICKER_MODE,
+  LossStickerBadge,
+  ProfitStickerBadge,
+  type LossStickerMode,
+  type ProfitStickerMode
+} from "@/components/loss-sticker-badge";
 import { SecurityLogo } from "@/components/security-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useMarketIndicators } from "@/hooks/use-market-indicators";
@@ -110,6 +116,9 @@ const defaultTargets: PortfolioTargetInput[] = [
   { targetType: "ASSET", targetKey: "개별주", targetWeight: 40 }
 ];
 
+const lossStickerMode: LossStickerMode = DEFAULT_LOSS_STICKER_MODE;
+const profitStickerMode: ProfitStickerMode = DEFAULT_PROFIT_STICKER_MODE;
+
 export default function DashboardPage() {
   const router = useRouter();
   const { notify } = useToast();
@@ -128,7 +137,7 @@ export default function DashboardPage() {
     refetchIntervalInBackground: true,
     retry: false
   });
-  const marketIndicatorsQuery = useMarketIndicators(Boolean(token));
+  const marketIndicatorsQuery = useMarketIndicators(token, Boolean(token));
   const summaryQuery = useQuery({
     queryKey: ["summary"],
     queryFn: () => api.summary(token),
@@ -279,13 +288,6 @@ export default function DashboardPage() {
         ) : null}
         {view === "alerts" ? <AlertCenterPanel summary={summaryQuery.data} onNavigate={navigate} /> : null}
       </main>
-      <aside className="dashboard-right-panel hidden h-screen w-[300px] shrink-0 overflow-y-auto overflow-x-hidden border-l px-4 py-6 min-[1400px]:block min-[1536px]:w-[320px]" data-right-panel>
-        {summaryQuery.data ? (
-          <DashboardSidePanel data={summaryQuery.data} onNavigate={navigate} />
-        ) : (
-          <RightPanelPlaceholder loading={summaryQuery.isLoading} />
-        )}
-      </aside>
       <AccountConnectionModal open={connectModalOpen} onClose={() => setConnectModalOpen(false)} onChoose={handleConnectChoice} />
     </div>
   );
@@ -325,15 +327,6 @@ function Sidebar({
 }) {
   const accountGroups = buildBrokerAccountGroups(accounts);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  const secondaryItems: Array<{ key: StaticViewKey; label: string; icon: ElementType }> = [
-    { key: "ai", label: "AI 분석", icon: LineChartIcon },
-    { key: "rebalance", label: "리밸런싱 추천", icon: SlidersHorizontal },
-    { key: "dividend", label: "배당 캘린더", icon: CalendarDays },
-    { key: "tax", label: "세금/절세", icon: CircleDollarSign },
-    { key: "market", label: "시장 지표", icon: Globe2 },
-    { key: "alerts", label: "알림 센터", icon: Bell },
-    { key: "upload", label: "업로드 관리", icon: Upload }
-  ];
 
   useEffect(() => {
     setOpenGroups((current) => {
@@ -444,27 +437,6 @@ function Sidebar({
           </Button>
         </section>
 
-        <section className="space-y-1.5">
-          {secondaryItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = active === item.key;
-            return (
-              <motion.button
-                key={item.key}
-                onClick={() => onNavigate(item.key)}
-                whileHover={{ x: 2 }}
-                transition={{ duration: 0.18 }}
-                className={cn(
-                  "flex h-9 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium transition",
-                  isActive ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "theme-nav-idle"
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                {item.label}
-              </motion.button>
-            );
-          })}
-        </section>
       </nav>
       <div className="mt-5 space-y-2 pb-1">
         <Button className="h-10 w-full justify-start rounded-lg bg-transparent px-3 text-[13px] font-medium" variant="ghost" onClick={() => onNavigate("settings")}>
@@ -560,12 +532,12 @@ function PriceRefreshStatus({
         </div>
       </div>
       {messages.length > 0 ? (
-        <div className="flex gap-2 rounded-2xl border border-orange-400/20 bg-orange-500/10 px-4 py-3 text-sm text-orange-200">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="flex gap-2 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800 shadow-[0_10px_28px_rgba(251,146,60,0.12)] dark:border-orange-400/25 dark:bg-orange-500/10 dark:text-orange-100">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-orange-500 dark:text-orange-300" />
           <div>
-            <p className="font-black">현재가 갱신 일부 실패</p>
-            <p className="mt-1">{messages.join(" ")}</p>
-            <p className="mt-1 text-xs">마지막 성공 가격을 유지한 상태로 화면을 표시합니다.</p>
+            <p className="font-black text-orange-950 dark:text-orange-100">현재가 갱신 일부 실패</p>
+            <p className="mt-1 font-medium text-orange-700 dark:text-orange-100">{messages.join(" ")}</p>
+            <p className="mt-1 text-xs font-medium text-orange-600 dark:text-orange-200">마지막 성공 가격을 유지한 상태로 화면을 표시합니다.</p>
           </div>
         </div>
       ) : null}
@@ -787,9 +759,6 @@ function Overview({
           <DuplicateHoldings data={data} />
           <AiInsightCard data={data} onNavigate={onNavigate} />
         </section>
-        <div className="min-[1400px]:hidden">
-          <DashboardSidePanel data={data} onNavigate={onNavigate} />
-        </div>
       </div>
     </motion.div>
   );
@@ -1209,161 +1178,6 @@ function MovementCell({ label, value, strong = false }: { label: string; value: 
   );
 }
 
-function DashboardSidePanel({ data, onNavigate }: { data: PortfolioSummary; onNavigate: (view: ViewKey) => void }) {
-  const alerts = [
-    { title: "NVDA 비중이 20%를 초과했어요", detail: "1시간 전", tone: "danger" as const, view: "rebalance" as ViewKey },
-    { title: "USD/KRW 환율이 1,400원을 돌파", detail: "3시간 전", tone: "info" as const, view: "market" as ViewKey },
-    { title: "공포탐욕지수 80 이상 주의", detail: "1일 전", tone: "success" as const, view: "ai" as ViewKey }
-  ];
-  const calendar = [
-    { title: "VOO 배당금 지급 예정", date: "2024.06.07", tone: "dividend" as const, view: "dividend" as ViewKey },
-    { title: "미국 고용지표 발표", date: "2024.06.07", tone: "macro" as const, view: "market" as ViewKey },
-    { title: "FOMC 회의록 발표", date: "2024.06.12", tone: "event" as const, view: "market" as ViewKey }
-  ];
-  const fxExposureRate = data.metrics.fxExposureRate;
-  const krwWeight = Math.max(0, 100 - fxExposureRate);
-
-  return (
-    <aside className="space-y-4">
-      <Card className="min-h-[310px]">
-        <CardHeader>
-          <CardTitle>환율 및 노출도</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div>
-            <p className="text-[13px] font-normal text-[var(--text-secondary)]">USD/KRW 환율</p>
-            <p className="numeric mt-2 block min-w-[156px] overflow-hidden text-[26px] font-semibold leading-none text-[var(--text-primary)]">1,387.20원</p>
-            <p className="numeric mt-2 text-[13px] font-semibold text-[#EF4444]">▲ 6.20&nbsp;&nbsp;+0.45%</p>
-          </div>
-          <MiniSparkline className="mt-3 h-10 w-full text-[#22C55E]" changeRate={fxExposureRate} />
-          <div className="mt-3">
-            <div className="flex items-center justify-between">
-              <p className="text-[13px] font-normal text-[var(--text-secondary)]">달러 노출도</p>
-              <span className="rounded-lg bg-[#EF4444]/18 px-3 py-1 text-[12px] font-semibold text-[#EF4444]">매우 높음</span>
-            </div>
-            <p className="numeric mt-2 block min-w-[112px] overflow-hidden text-[30px] font-semibold leading-none text-[var(--text-primary)]">{fxExposureRate.toFixed(1)}%</p>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-subtle)]">
-              <div className="h-full rounded-full bg-gradient-to-r from-[#3B82F6] to-[#8B5CF6]" style={{ width: `${Math.min(100, fxExposureRate)}%` }} />
-            </div>
-            <div className="mt-3 flex items-center justify-between text-[12px] text-[var(--text-secondary)]">
-              <span>원화 비중</span>
-              <span className="numeric text-[var(--text-primary)]">{krwWeight.toFixed(1)}%</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      <Card className="min-h-[244px]">
-        <CardHeader>
-          <CardTitle>최근 알림</CardTitle>
-          <button className="text-[12px] font-medium text-[#3B82F6] transition hover:text-blue-200" onClick={() => onNavigate("alerts")}>
-            전체 보기
-          </button>
-        </CardHeader>
-        <CardContent className="space-y-2 pt-1">
-          {alerts.map((alert) => (
-            <SideAlertRow key={alert.title} title={alert.title} detail={alert.detail} tone={alert.tone} onClick={() => onNavigate(alert.view)} />
-          ))}
-          <Button className="mt-1 h-9 w-full rounded-xl text-[13px] font-medium" variant="dark" onClick={() => onNavigate("settings")}>
-            알림 설정
-          </Button>
-        </CardContent>
-      </Card>
-      <Card className="min-h-[252px]">
-        <CardHeader>
-          <CardTitle>오늘의 캘린더</CardTitle>
-          <button className="text-[12px] font-medium text-[#3B82F6] transition hover:text-blue-200" onClick={() => onNavigate("dividend")}>
-            전체 보기
-          </button>
-        </CardHeader>
-        <CardContent className="space-y-2 pt-1">
-          {calendar.map((item) => (
-            <CalendarRow key={item.title} title={item.title} date={item.date} tone={item.tone} onClick={() => onNavigate(item.view)} />
-          ))}
-        </CardContent>
-      </Card>
-    </aside>
-  );
-}
-
-function RightPanelPlaceholder({ loading }: { loading: boolean }) {
-  return (
-    <aside className="space-y-4">
-      <Card className="min-h-[310px]">
-        <CardHeader>
-          <CardTitle>요약 패널</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {Array.from({ length: loading ? 4 : 2 }).map((_, index) => (
-              <div key={index} className="h-12 animate-pulse rounded-xl bg-[var(--surface-subtle)]" />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </aside>
-  );
-}
-
-function SideAlertRow({
-  title,
-  detail,
-  tone,
-  onClick
-}: {
-  title: string;
-  detail: string;
-  tone: "danger" | "info" | "success";
-  onClick: () => void;
-}) {
-  const toneClass = {
-    danger: "bg-[#EF4444]/16 text-[#EF4444]",
-    info: "bg-[#3B82F6]/16 text-[#60A5FA]",
-    success: "bg-[#22C55E]/16 text-[#22C55E]"
-  }[tone];
-
-  return (
-    <button type="button" className="flex w-full items-start gap-3 rounded-xl p-1.5 text-left transition hover:bg-[var(--surface-hover)]" onClick={onClick}>
-      <span className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold", toneClass)}>
-        {tone === "danger" ? "!" : tone === "info" ? "i" : "✓"}
-      </span>
-      <span className="min-w-0">
-        <span className="block truncate text-[13px] font-medium text-[var(--text-primary)]">{title}</span>
-        <span className="mt-1 block text-[12px] font-normal text-[var(--text-secondary)]">{detail}</span>
-      </span>
-    </button>
-  );
-}
-
-function CalendarRow({
-  title,
-  date,
-  tone,
-  onClick
-}: {
-  title: string;
-  date: string;
-  tone: "dividend" | "macro" | "event";
-  onClick: () => void;
-}) {
-  const toneClass = {
-    dividend: "bg-amber-400/16 text-amber-300",
-    macro: "bg-blue-400/16 text-blue-300",
-    event: "bg-rose-400/16 text-rose-300"
-  }[tone];
-
-  return (
-    <button type="button" className="flex w-full items-start gap-3 rounded-xl p-1.5 text-left transition hover:bg-[var(--surface-hover)]" onClick={onClick}>
-      <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold", toneClass)}>
-        {tone === "dividend" ? "배" : tone === "macro" ? "지" : "회"}
-      </span>
-      <span className="min-w-0">
-        <span className="block truncate text-[13px] font-medium text-[var(--text-primary)]">{title}</span>
-        <span className="mt-1 block text-[12px] font-normal text-[var(--text-secondary)]">{date}</span>
-      </span>
-    </button>
-  );
-}
-
 function AllocationCard({ title, data, center }: { title: string; data: PortfolioSummary["assetAllocation"]; center: string }) {
   return (
     <Card className="min-h-[314px] overflow-hidden">
@@ -1595,6 +1409,8 @@ function AggregatedHoldingsList({ data }: { data: PortfolioSummary }) {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate text-base font-black text-slate-950">{holding.symbol}</p>
+                          <LossStickerBadge profitLossRate={holding.profitLossRate} mode={lossStickerMode} />
+                          <ProfitStickerBadge profitLossRate={holding.profitLossRate} mode={profitStickerMode} />
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">
                             {holding.marketCountry === "US" ? "미국" : "국내"}
                           </span>
@@ -1914,8 +1730,6 @@ function TossHoldingRowButton({
   const profitColor = holding.profitLoss >= 0 ? "text-[#ff3b4e]" : "text-[#2f7dff]";
   const displayValue = valueMode === "price" ? formatHoldingPrice(holding.marketPrice, holding.currency) : formatKrw(holding.marketValue);
   const displayName = holding.name.trim() || holding.symbol;
-  const drawdownStickerCount = getDrawdownStickerCount(holding.profitLossRate);
-  const burgerStickerCount = getBurgerStickerCount(holding.profitLossRate);
 
   return (
     <button
@@ -1938,6 +1752,8 @@ function TossHoldingRowButton({
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5">
             <p className="truncate text-base font-black text-[var(--text-primary)]">{displayName}</p>
+            <LossStickerBadge profitLossRate={holding.profitLossRate} mode={lossStickerMode} />
+            <ProfitStickerBadge profitLossRate={holding.profitLossRate} mode={profitStickerMode} />
             <span className="text-xs leading-none">{marketCountryFlag(holding)}</span>
             {holding.accountCount > 1 ? (
               <span className="rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 text-[10px] font-black text-[var(--text-secondary)]">{holding.accountCount}계좌</span>
@@ -1945,7 +1761,6 @@ function TossHoldingRowButton({
           </div>
           <p className="mt-0.5 truncate text-xs font-bold text-slate-400">{holding.symbol}</p>
           <p className="numeric mt-0.5 text-xs font-semibold text-slate-400">{formatQuantity(holding.totalQuantity)}주</p>
-          <HoldingStickerStrip drawdownCount={drawdownStickerCount} burgerCount={burgerStickerCount} rate={holding.profitLossRate} />
           {showBrokerBadges ? (
             <div className="mt-1 flex max-w-[360px] flex-wrap gap-1">
               {holding.brokerBreakdown.map((item) => (
@@ -1986,8 +1801,6 @@ function TossHoldingDetailPanel({ holding, onClear }: { holding: TossHoldingRow 
 
   const profitColor = holding.profitLoss >= 0 ? "text-[#ff3b4e]" : "text-[#2f7dff]";
   const displayName = holding.name.trim() || holding.symbol;
-  const drawdownStickerCount = getDrawdownStickerCount(holding.profitLossRate);
-  const burgerStickerCount = getBurgerStickerCount(holding.profitLossRate);
 
   return (
     <aside className="min-w-0 overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface)] p-5 xl:sticky xl:top-5">
@@ -2002,11 +1815,13 @@ function TossHoldingDetailPanel({ holding, onClear }: { holding: TossHoldingRow 
             showCountryBadge
           />
           <div className="min-w-0">
-            <p className="truncate text-lg font-black text-[var(--text-primary)]">
-              {displayName} <span className="text-sm">{marketCountryFlag(holding)}</span>
-            </p>
+            <div className="flex min-w-0 items-center gap-2">
+              <p className="truncate text-lg font-black text-[var(--text-primary)]">{displayName}</p>
+              <LossStickerBadge profitLossRate={holding.profitLossRate} mode={lossStickerMode} size="md" />
+              <ProfitStickerBadge profitLossRate={holding.profitLossRate} mode={profitStickerMode} size="md" />
+              <span className="shrink-0 text-sm">{marketCountryFlag(holding)}</span>
+            </div>
             <p className="truncate text-xs font-bold text-slate-400">{holding.symbol}</p>
-            <HoldingStickerStrip drawdownCount={drawdownStickerCount} burgerCount={burgerStickerCount} rate={holding.profitLossRate} size="md" />
           </div>
         </div>
         <Button size="sm" variant="dark" onClick={onClear}>
@@ -2120,7 +1935,11 @@ function TopHoldings({ data }: { data: PortfolioSummary }) {
                 showCountryBadge
               />
               <div className="min-w-0">
-                <p className="truncate font-semibold text-[var(--text-primary)]">{holding.symbol}</p>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <p className="truncate font-semibold text-[var(--text-primary)]">{holding.symbol}</p>
+                  <LossStickerBadge profitLossRate={holding.profitLossRate} mode={lossStickerMode} />
+                  <ProfitStickerBadge profitLossRate={holding.profitLossRate} mode={profitStickerMode} />
+                </div>
                 <p className="truncate text-[10px] font-normal text-[var(--text-secondary)]">{holding.name}</p>
               </div>
               <p className="numeric overflow-hidden text-ellipsis text-right text-[12px] font-normal text-[var(--text-secondary)]">{((safeNumber(holding.marketValue) / totalMarketValue) * 100).toFixed(2)}%</p>
@@ -2170,7 +1989,11 @@ function DuplicateHoldings({ data }: { data: PortfolioSummary }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-[14px] font-semibold text-[var(--text-primary)]">{item.symbol}</p>
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <p className="truncate text-[14px] font-semibold text-[var(--text-primary)]">{item.symbol}</p>
+                        <LossStickerBadge profitLossRate={item.profitLossRate} mode={lossStickerMode} />
+                        <ProfitStickerBadge profitLossRate={item.profitLossRate} mode={profitStickerMode} />
+                      </div>
                       <p className="truncate text-[11px] font-normal text-[var(--text-secondary)]">{item.name}</p>
                     </div>
                     <div className="text-right text-[13px]">
@@ -4531,60 +4354,6 @@ function cleanDisplayName(value: string) {
 function isDomesticHolding(holding: { marketCountry: string; currency: string }) {
   const country = holding.marketCountry.toUpperCase();
   return country === "KR" || country === "KOR" || country === "KOREA" || holding.currency === "KRW";
-}
-
-function getDrawdownStickerCount(profitLossRate: number) {
-  if (!Number.isFinite(profitLossRate) || profitLossRate > -5) return 0;
-  return Math.floor(Math.abs(profitLossRate) / 5);
-}
-
-function getBurgerStickerCount(profitLossRate: number) {
-  if (!Number.isFinite(profitLossRate) || profitLossRate < 100) return 0;
-  return Math.floor(profitLossRate / 100);
-}
-
-function HoldingStickerStrip({
-  drawdownCount,
-  burgerCount,
-  rate,
-  size = "sm"
-}: {
-  drawdownCount: number;
-  burgerCount: number;
-  rate: number;
-  size?: "sm" | "md";
-}) {
-  if (drawdownCount <= 0 && burgerCount <= 0) return null;
-  const stickerSizeClass = size === "md" ? "h-9 w-9 rounded-lg" : "h-7 w-7 rounded-md";
-  const stripClassName =
-    size === "md"
-      ? "mt-2 flex max-w-[280px] flex-wrap items-center gap-1.5 rounded-xl bg-black/20 p-1.5"
-      : "mt-1.5 flex max-w-[240px] flex-wrap items-center gap-1 rounded-lg bg-black/20 p-1";
-
-  return (
-    <div
-      className={stripClassName}
-      aria-label={`수익률 ${formatPercent(rate)} 기준 사람 스티커 ${drawdownCount}개, 햄버거 스티커 ${burgerCount}개`}
-      title={`손실 -5%당 사람 1개 · 수익 +100%당 햄버거 1개`}
-    >
-      {Array.from({ length: drawdownCount }).map((_, index) => (
-        <img
-          key={`drawdown-${drawdownCount}-${index}`}
-          src="/drawdown-mao-sticker.png"
-          alt=""
-          className={cn("shrink-0 border border-white/15 bg-white/10 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.50)]", stickerSizeClass)}
-        />
-      ))}
-      {Array.from({ length: burgerCount }).map((_, index) => (
-        <img
-          key={`burger-${burgerCount}-${index}`}
-          src="/profit-hamburger-sticker.png"
-          alt=""
-          className={cn("shrink-0 border border-white/15 bg-white/10 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.50)]", stickerSizeClass)}
-        />
-      ))}
-    </div>
-  );
 }
 
 function marketCountryFlag(holding: { marketCountry: string; currency: string }) {

@@ -45,13 +45,13 @@ export class PortfolioService {
   ) {}
 
   async getSummary(userId: string) {
-    const marketContext = await this.marketIndicatorsService.getMarketContext();
+    const marketContext = await this.marketIndicatorsService.getMarketContext(userId);
     const holdings = await this.getHoldingRows(userId, undefined, marketContext.usdKrwRate);
     return this.buildSummary(holdings, marketContext);
   }
 
   async getBrokerPortfolio(userId: string, broker: string) {
-    const usdKrwRate = await this.marketIndicatorsService.getUsdKrwRate();
+    const usdKrwRate = await this.marketIndicatorsService.getUsdKrwRate(userId);
     const holdings = await this.getHoldingRows(userId, broker as Broker, usdKrwRate);
     return {
       broker,
@@ -61,7 +61,7 @@ export class PortfolioService {
   }
 
   async getHoldingRows(userId: string, broker?: Broker, usdKrwRate?: number): Promise<HoldingRow[]> {
-    const effectiveUsdKrwRate = usdKrwRate ?? (await this.marketIndicatorsService.getUsdKrwRate());
+    const effectiveUsdKrwRate = usdKrwRate ?? (await this.marketIndicatorsService.getUsdKrwRate(userId));
     const rows = await this.prisma.holding.findMany({
       where: {
         account: {
@@ -276,19 +276,27 @@ export class PortfolioService {
     const grouped = groupBy(holdings, (holding) => holding.symbol);
     return Object.entries(grouped)
       .filter(([, rows]) => new Set(rows.map((row) => row.accountAlias)).size > 1)
-      .map(([symbol, rows]) => ({
-        symbol,
-        name: rows[0]?.name ?? symbol,
-        securityId: rows[0]?.securityId ?? "",
-        marketCountry: rows[0]?.marketCountry ?? "",
-        currency: rows[0]?.currency ?? "",
-        logoUrl: rows[0]?.logoUrl ?? null,
-        companyDomain: rows[0]?.companyDomain ?? null,
-        logoSource: rows[0]?.logoSource ?? "FALLBACK",
-        accounts: Array.from(new Set(rows.map((row) => row.accountAlias))),
-        totalQuantity: sum(rows.map((row) => row.quantity)),
-        totalMarketValue: sum(rows.map((row) => row.marketValue))
-      }))
+      .map(([symbol, rows]) => {
+        const totalMarketValue = sum(rows.map((row) => row.marketValue));
+        const totalCostAmount = sum(rows.map((row) => row.costAmount));
+        const totalProfitLoss = sum(rows.map((row) => row.profitLoss));
+
+        return {
+          symbol,
+          name: rows[0]?.name ?? symbol,
+          securityId: rows[0]?.securityId ?? "",
+          marketCountry: rows[0]?.marketCountry ?? "",
+          currency: rows[0]?.currency ?? "",
+          logoUrl: rows[0]?.logoUrl ?? null,
+          companyDomain: rows[0]?.companyDomain ?? null,
+          logoSource: rows[0]?.logoSource ?? "FALLBACK",
+          accounts: Array.from(new Set(rows.map((row) => row.accountAlias))),
+          totalQuantity: sum(rows.map((row) => row.quantity)),
+          totalMarketValue,
+          profitLoss: totalProfitLoss,
+          profitLossRate: totalCostAmount > 0 ? (totalProfitLoss / totalCostAmount) * 100 : 0
+        };
+      })
       .sort((a, b) => b.totalMarketValue - a.totalMarketValue);
   }
 

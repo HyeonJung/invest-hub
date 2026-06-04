@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { MarketIndicator, Prisma } from "@prisma/client";
+import { TossOpenApiService } from "../brokers/toss-open-api.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CachedMarketDataService } from "./cached-market-data.service";
 
@@ -9,40 +10,54 @@ const FALLBACK_USD_KRW_RATE = Number(process.env.USD_KRW_RATE ?? 1516.5);
 export class MarketIndicatorsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cachedMarketDataService: CachedMarketDataService
+    private readonly cachedMarketDataService: CachedMarketDataService,
+    private readonly tossOpenApiService: TossOpenApiService
   ) {}
 
-  async getIndicators() {
-    const rows = await this.prisma.marketIndicator.findMany({ orderBy: { symbol: "asc" } });
-    const needsRefresh = rows.length === 0 || rows.some((row) => row.expiresAt.getTime() <= Date.now());
-    if (needsRefresh) {
-      return this.refreshIndicators(false);
+  async getIndicators(userId?: string) {
+    const initialRows = await this.prisma.marketIndicator.findMany({ orderBy: { symbol: "asc" } });
+    if (initialRows.length === 0) {
+      return this.refreshIndicators(false, userId);
     }
 
-    return this.toResponse(rows, []);
+    const errors = await this.refreshUsdKrwFromToss(userId);
+    const rows = await this.prisma.marketIndicator.findMany({ orderBy: { symbol: "asc" } });
+    const needsRefresh = rows.some((row) => row.symbol !== "USD_KRW" && row.expiresAt.getTime() <= Date.now());
+    if (needsRefresh) {
+      return this.refreshIndicators(false, userId);
+    }
+
+    return this.toResponse(rows, errors);
   }
 
-  async refreshIndicators(force = true) {
+  async refreshIndicators(force = true, userId?: string) {
     const now = new Date();
     const existingRows = await this.prisma.marketIndicator.findMany();
     const existingBySymbol = new Map(existingRows.map((row) => [row.symbol, row]));
     const expiredRows = existingRows.filter((row) => row.expiresAt.getTime() <= now.getTime());
 
     if (!force && existingRows.length > 0 && expiredRows.length === 0) {
-      return this.toResponse(existingRows, []);
+      const errors = await this.refreshUsdKrwFromToss(userId, now, force);
+      const rows = await this.prisma.marketIndicator.findMany({ orderBy: { symbol: "asc" } });
+      return this.toResponse(rows, errors);
     }
 
     const { indicators, errors } = await this.cachedMarketDataService.getAllIndicators(force);
+    const tossErrors = await this.refreshUsdKrwFromToss(userId, now, force);
+    const rowsAfterToss = await this.prisma.marketIndicator.findMany();
+    const usdKrwFromToss = rowsAfterToss.find((row) => row.symbol === "USD_KRW" && row.source === "TOSS_OPEN_API");
+    const providerIndicators = usdKrwFromToss ? indicators.filter((indicator) => indicator.symbol !== "USD_KRW") : indicators;
     const dueIndicators = indicators.filter((indicator) => {
       const existing = existingBySymbol.get(indicator.symbol);
       return force || !existing || existing.expiresAt.getTime() <= now.getTime();
-    });
+    }).filter((indicator) => !usdKrwFromToss || indicator.symbol !== "USD_KRW");
 
     if (dueIndicators.length === 0 && existingRows.length > 0 && errors.length === 0) {
-      return this.toResponse(existingRows, []);
+      const rows = await this.prisma.marketIndicator.findMany({ orderBy: { symbol: "asc" } });
+      return this.toResponse(rows, tossErrors);
     }
 
-    if (indicators.length === 0) {
+    if (providerIndicators.length === 0 && !usdKrwFromToss) {
       errors.push("시장 지표 공급자 응답이 없어 마지막 성공 데이터를 유지했습니다.");
     }
 
@@ -109,25 +124,38 @@ export class MarketIndicatorsService {
     }
 
     const rows = await this.prisma.marketIndicator.findMany({ orderBy: { symbol: "asc" } });
-    return this.toResponse(rows, errors);
+    return this.toResponse(rows, [...errors, ...tossErrors]);
   }
 
-  async getUsdKrwRate() {
+  async getUsdKrwRate(userId?: string) {
+    if (userId) {
+      const cachedTossRate = await this.getFreshTossUsdKrwRate();
+      if (cachedTossRate) return cachedTossRate;
+
+      await this.refreshUsdKrwFromToss(userId);
+      const refreshedTossRate = await this.getFreshTossUsdKrwRate();
+      if (refreshedTossRate) return refreshedTossRate;
+    }
+
+    const indicator = await this.prisma.marketIndicator.findUnique({ where: { symbol: "USD_KRW" } });
+    const value = indicator ? Number(indicator.value) : 0;
+    if (value > 0) return value;
+
     const response = await this.getIndicators();
-    const indicator = response.indicators.find((row) => row.symbol === "USD_KRW");
-    return indicator?.value && indicator.value > 0 ? indicator.value : FALLBACK_USD_KRW_RATE;
+    const providerIndicator = response.indicators.find((row) => row.symbol === "USD_KRW");
+    return providerIndicator?.value && providerIndicator.value > 0 ? providerIndicator.value : FALLBACK_USD_KRW_RATE;
   }
 
-  async getExchangeRate() {
-    const response = await this.getIndicators();
+  async getExchangeRate(userId?: string) {
+    const response = await this.getIndicators(userId);
     return {
       ...response,
       indicators: response.indicators.filter((indicator) => indicator.symbol === "USD_KRW")
     };
   }
 
-  async getMarketContext() {
-    const response = await this.getIndicators();
+  async getMarketContext(userId?: string) {
+    const response = await this.getIndicators(userId);
     const bySymbol = new Map(response.indicators.map((indicator) => [indicator.symbol, indicator]));
     const usdKrw = bySymbol.get("USD_KRW");
     const spx = bySymbol.get("SPX");
@@ -174,6 +202,73 @@ export class MarketIndicatorsService {
       indicators,
       errors
     };
+  }
+
+  private async getFreshTossUsdKrwRate(now = new Date()) {
+    const row = await this.prisma.marketIndicator.findUnique({ where: { symbol: "USD_KRW" } });
+    const value = row ? Number(row.value) : 0;
+    if (row?.source === "TOSS_OPEN_API" && row.expiresAt.getTime() > now.getTime() && value > 0) return value;
+    return null;
+  }
+
+  private async refreshUsdKrwFromToss(userId?: string, now = new Date(), force = false) {
+    if (!userId) return [] as string[];
+
+    const existing = await this.prisma.marketIndicator.findUnique({ where: { symbol: "USD_KRW" } });
+    const existingValue = existing ? Number(existing.value) : 0;
+    const hasFreshTossRate =
+      existing?.source === "TOSS_OPEN_API" && existing.expiresAt.getTime() > now.getTime() && existingValue > 0;
+    if (!force && hasFreshTossRate) return [] as string[];
+
+    try {
+      const tossRate = await this.tossOpenApiService.getUsdKrwRateForUser(userId);
+      if (!tossRate?.rate || tossRate.rate <= 0) return [] as string[];
+
+      const previousValue = existing ? Number(existing.value) : tossRate.rate;
+      const change = tossRate.rate - previousValue;
+      const changeRate = previousValue > 0 ? (change / previousValue) * 100 : 0;
+
+      await this.prisma.marketIndicator.upsert({
+        where: { symbol: "USD_KRW" },
+        create: {
+          symbol: "USD_KRW",
+          name: "USD/KRW 환율",
+          category: "FX",
+          value: new Prisma.Decimal(tossRate.rate),
+          change: new Prisma.Decimal(change),
+          changeRate: new Prisma.Decimal(changeRate),
+          status: change > 0 ? "UP" : change < 0 ? "DOWN" : "NEUTRAL",
+          currency: "KRW",
+          unit: "KRW",
+          marketState: null,
+          source: tossRate.source,
+          refreshIntervalMs: 45_000,
+          lastUpdatedAt: tossRate.fetchedAt ?? now,
+          expiresAt: new Date(now.getTime() + 45_000),
+          errorMessage: null
+        },
+        update: {
+          name: "USD/KRW 환율",
+          category: "FX",
+          value: new Prisma.Decimal(tossRate.rate),
+          change: new Prisma.Decimal(change),
+          changeRate: new Prisma.Decimal(changeRate),
+          status: change > 0 ? "UP" : change < 0 ? "DOWN" : "NEUTRAL",
+          currency: "KRW",
+          unit: "KRW",
+          marketState: null,
+          source: tossRate.source,
+          refreshIntervalMs: 45_000,
+          lastUpdatedAt: tossRate.fetchedAt ?? now,
+          expiresAt: new Date(now.getTime() + 45_000),
+          errorMessage: null
+        }
+      });
+
+      return [] as string[];
+    } catch {
+      return ["토스증권 환율 조회에 실패해 마지막 성공 환율을 유지했습니다."];
+    }
   }
 }
 

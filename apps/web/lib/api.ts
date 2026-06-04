@@ -15,7 +15,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...options,
-    headers
+    headers,
+    credentials: "include"
   });
 
   if (!response.ok) {
@@ -27,8 +28,14 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export const api = {
+  authUrl: (provider: "kakao" | "naver") => `${getApiBaseUrl()}/auth/${provider}`,
+  me: () => request<AuthUser>("/auth/me"),
+  logout: () =>
+    request<{ ok: true }>("/auth/logout", {
+      method: "POST"
+    }),
   login: (email: string, password: string) =>
-    request<{ token: string; user: { id: string; email: string; name: string } }>("/auth/login", {
+    request<AuthUser>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password })
     }),
@@ -184,6 +191,15 @@ export const api = {
 };
 
 export type BrokerKey = "TOSS" | "NAMUH" | "KIWOOM";
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  name: string;
+  profileImageUrl: string | null;
+  lastLoginAt: string | null;
+  providers: Array<"KAKAO" | "NAVER">;
+};
 
 export type Metric = {
   totalMarketValue: number;

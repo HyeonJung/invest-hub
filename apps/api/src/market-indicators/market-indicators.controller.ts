@@ -1,4 +1,5 @@
-import { Controller, Get, Headers, Post } from "@nestjs/common";
+import { Controller, Get, Post, Req } from "@nestjs/common";
+import type { Request } from "express";
 import { AuthService } from "../auth/auth.service";
 import { MarketIndicatorsService } from "./market-indicators.service";
 
@@ -10,20 +11,20 @@ export class MarketIndicatorsController {
   ) {}
 
   @Get()
-  async list(@Headers("authorization") authorization?: string) {
-    const userId = await this.authService.userIdFromToken(authorization);
+  async list(@Req() request: Request) {
+    const userId = await this.authService.userIdFromRequest(request);
     return this.marketIndicatorsService.getIndicators(userId);
   }
 
   @Get("exchange-rate")
-  async exchangeRate(@Headers("authorization") authorization?: string) {
-    const userId = await this.authService.userIdFromToken(authorization);
+  async exchangeRate(@Req() request: Request) {
+    const userId = await this.authService.userIdFromRequest(request);
     return this.marketIndicatorsService.getExchangeRate(userId);
   }
 
   @Post("refresh")
-  async refresh(@Headers("authorization") authorization?: string) {
-    const userId = await this.authService.userIdFromToken(authorization);
+  async refresh(@Req() request: Request) {
+    const userId = await this.authService.userIdFromRequest(request);
     return this.marketIndicatorsService.refreshIndicators(true, userId);
   }
 }

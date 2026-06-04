@@ -49,18 +49,47 @@ enum LogoSource {
   FALLBACK
 }
 
+enum SocialProvider {
+  KAKAO
+  NAVER
+}
+
 model User {
-  id          String   @id @default(uuid())
-  email       String   @unique
-  name        String
-  passwordHash String
-  plan        String   @default("FREE")
-  createdAt   DateTime @default(now())
+  id              String   @id @default(uuid())
+  email           String   @unique
+  name            String
+  passwordHash    String?
+  profileImageUrl String?  @map("profile_image_url")
+  plan            String   @default("FREE")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  lastLoginAt     DateTime? @map("last_login_at")
 
   connections    BrokerConnection[]
   accounts       InvestmentAccount[]
   accountApiKeys AccountApiCredential[]
   targets        PortfolioTarget[]
+  socialAccounts SocialAccount[]
+}
+
+model SocialAccount {
+  id                    String         @id @default(uuid())
+  userId                String         @map("user_id")
+  provider              SocialProvider
+  providerUserId        String         @map("provider_user_id")
+  providerEmail         String?        @map("provider_email")
+  accessTokenEncrypted  String?        @map("access_token_encrypted")
+  refreshTokenEncrypted String?        @map("refresh_token_encrypted")
+  tokenExpiresAt        DateTime?      @map("token_expires_at")
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@unique([userId, provider])
+  @@index([userId])
+  @@map("social_accounts")
 }
 
 model BrokerConnection {

@@ -50,6 +50,7 @@ import {
 import { useRouter } from "next/navigation";
 import {
   api,
+  AuthUser,
   BrokerKey,
   BrokerPortfolio,
   ChartDatum,
@@ -126,12 +127,14 @@ const defaultTargets: PortfolioTargetInput[] = [
 
 const lossStickerMode: LossStickerMode = DEFAULT_LOSS_STICKER_MODE;
 const profitStickerMode: ProfitStickerMode = DEFAULT_PROFIT_STICKER_MODE;
+const sessionToken = "cookie-session";
 
 export default function DashboardPage() {
   const router = useRouter();
   const { notify } = useToast();
   const queryClient = useQueryClient();
   const [token, setToken] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [view, setView] = useState<ViewKey>("overview");
   const [priceRefreshInterval, setPriceRefreshInterval] = useState(300_000);
@@ -157,21 +160,26 @@ export default function DashboardPage() {
   const selectedAccount = isAccountView(view) ? accountNavigation.find((account) => account.key === view) ?? null : null;
 
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem("invest-hub-token");
-      if (saved) {
-        setToken(saved);
-      }
-    } finally {
-      setSessionChecked(true);
-    }
-  }, []);
+    let alive = true;
 
-  useEffect(() => {
-    if (sessionChecked && !token) {
-      router.replace("/login");
-    }
-  }, [router, sessionChecked, token]);
+    api
+      .me()
+      .then((user) => {
+        if (!alive) return;
+        setCurrentUser(user);
+        setToken(sessionToken);
+      })
+      .catch(() => {
+        if (alive) router.replace("/login");
+      })
+      .finally(() => {
+        if (alive) setSessionChecked(true);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [router]);
 
   useEffect(() => {
     const result = priceRefreshQuery.data;
@@ -244,6 +252,20 @@ export default function DashboardPage() {
     });
   }
 
+  async function handleLogout() {
+    try {
+      await api.logout();
+      notify({ kind: "success", title: "로그아웃 완료", description: "다음 이용 시 다시 로그인해주세요." });
+    } catch (error) {
+      notify({ kind: "error", title: "로그아웃 실패", description: error instanceof Error ? error.message : "세션 정리 중 문제가 발생했습니다." });
+    } finally {
+      queryClient.clear();
+      setCurrentUser(null);
+      setToken(null);
+      router.replace("/login");
+    }
+  }
+
   return (
     <div className="dashboard-shell flex h-screen w-screen overflow-hidden bg-[#F7F9FC]" data-dashboard-shell>
       <button
@@ -258,9 +280,10 @@ export default function DashboardPage() {
         <Sidebar
           active={view}
           accounts={accountNavigation}
+          user={currentUser}
           onNavigate={navigate}
           onConnectAccount={openConnectModal}
-          onLogout={() => logout(router, notify)}
+          onLogout={handleLogout}
         />
       </aside>
       {mobileSidebarOpen ? (
@@ -278,9 +301,10 @@ export default function DashboardPage() {
             <Sidebar
               active={view}
               accounts={accountNavigation}
+              user={currentUser}
               onNavigate={navigate}
               onConnectAccount={openConnectModal}
-              onLogout={() => logout(router, notify)}
+              onLogout={handleLogout}
             />
           </aside>
         </div>
@@ -322,7 +346,7 @@ export default function DashboardPage() {
             )
           ) : null}
           {view === "upload" ? <UploadManager token={token} /> : null}
-          {view === "settings" ? <SettingsPanel token={token} /> : null}
+          {view === "settings" ? <SettingsPanel token={token} user={currentUser} onLogout={handleLogout} /> : null}
           {view === "rebalance" ? <RebalancePanel token={token} /> : null}
           {view === "ai" ? <AiPanel token={token} marketIndicators={marketIndicatorsQuery.data} /> : null}
           {view === "dividend" ? <SimpleAnalysisPanel token={token} kind="dividend" /> : null}
@@ -360,12 +384,14 @@ function SessionRequired({ onLogin }: { onLogin: () => void }) {
 function Sidebar({
   active,
   accounts,
+  user,
   onNavigate,
   onConnectAccount,
   onLogout
 }: {
   active: ViewKey;
   accounts: AccountNavigationItem[];
+  user: AuthUser | null;
   onNavigate: (view: ViewKey) => void;
   onConnectAccount: () => void;
   onLogout: () => void;
@@ -427,11 +453,40 @@ function Sidebar({
         </section>
       </nav>
       <div className="mt-5 space-y-2 pb-1">
+        <SidebarProfile user={user} />
         <Button className="h-10 w-full justify-start rounded-xl bg-transparent px-3 text-[13px] font-bold text-[#94A3B8] hover:bg-[#13223A] hover:text-white" variant="ghost" onClick={onLogout}>
           <LogOut className="h-4 w-4" />
           로그아웃
         </Button>
       </div>
+    </div>
+  );
+}
+
+function SidebarProfile({ user }: { user: AuthUser | null }) {
+  const displayName = user?.name?.trim() || "사용자";
+  const initial = displayName.slice(0, 1).toUpperCase();
+
+  return (
+    <div className="min-w-0 overflow-hidden rounded-2xl border border-white/5 bg-[#0D1729] p-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#3B82F6] to-[#14B8A6] text-sm font-black text-white">
+          {user?.profileImageUrl ? <img src={user.profileImageUrl} alt="" className="h-full w-full object-cover" loading="lazy" /> : initial}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-black text-white">{displayName}</p>
+          <p className="truncate text-[11px] font-semibold text-[#94A3B8]">{user?.email ?? "로그인 정보 확인 중"}</p>
+        </div>
+      </div>
+      {user?.providers.length ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {user.providers.map((provider) => (
+            <span key={provider} className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-black text-[#CBD5E1]">
+              {providerLabel(provider)}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2972,7 +3027,7 @@ function ValidationBadge({ label, value }: { label: string; value: number }) {
   );
 }
 
-function SettingsPanel({ token }: { token: string }) {
+function SettingsPanel({ token, user, onLogout }: { token: string; user: AuthUser | null; onLogout: () => void }) {
   const { notify } = useToast();
   const [targets, setTargets] = useState(defaultTargets);
   const query = useQuery({ queryKey: ["targets"], queryFn: () => api.targets(token) });
@@ -2990,6 +3045,7 @@ function SettingsPanel({ token }: { token: string }) {
 
   return (
     <div className="space-y-4">
+      <AccountSettingsCard user={user} onLogout={onLogout} />
       <TossCredentialSettings token={token} />
       <NamuhCredentialProfilesSettings token={token} />
       <KiwoomCredentialProfilesSettings token={token} />
@@ -3034,6 +3090,59 @@ function SettingsPanel({ token }: { token: string }) {
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function AccountSettingsCard({ user, onLogout }: { user: AuthUser | null; onLogout: () => void }) {
+  const displayName = user?.name?.trim() || "사용자";
+  const initial = displayName.slice(0, 1).toUpperCase();
+
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>계정</CardTitle>
+          <p className="mt-2 text-sm font-semibold text-slate-500">로그인 계정과 세션 정보를 확인합니다.</p>
+        </div>
+        <Button variant="outline" onClick={onLogout}>
+          <LogOut className="h-4 w-4" />
+          로그아웃
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="flex min-w-0 items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-blue-500 to-teal-400 text-xl font-black text-white">
+              {user?.profileImageUrl ? <img src={user.profileImageUrl} alt="" className="h-full w-full object-cover" loading="lazy" /> : initial}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-lg font-black text-slate-950">{displayName}</p>
+              <p className="mt-1 truncate text-sm font-semibold text-slate-500">{user?.email ?? "이메일 확인 중"}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(user?.providers.length ? user.providers : []).map((provider) => (
+                  <span key={provider} className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-slate-700 shadow-sm">
+                    {providerLabel(provider)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <AccountInfoCell label="로그인 방식" value={user?.providers.map(providerLabel).join(", ") || "확인 중"} />
+            <AccountInfoCell label="마지막 로그인" value={formatDateTime(user?.lastLoginAt)} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AccountInfoCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4">
+      <p className="text-xs font-black text-slate-500">{label}</p>
+      <p className="mt-2 truncate text-sm font-black text-slate-950">{value}</p>
     </div>
   );
 }
@@ -4147,13 +4256,6 @@ function SimpleAnalysisPanel({ token, kind }: { token: string; kind: "dividend" 
   );
 }
 
-function logout(router: ReturnType<typeof useRouter>, notify: ReturnType<typeof useToast>["notify"]) {
-  localStorage.removeItem("invest-hub-token");
-  localStorage.removeItem("invest-hub-user");
-  notify({ kind: "info", title: "로그아웃", description: "로그인 화면으로 이동합니다." });
-  router.push("/login");
-}
-
 function navLabel(view: ViewKey) {
   if (isAccountView(view)) return "계좌 대시보드";
   const labels: Record<StaticViewKey, string> = {
@@ -4687,6 +4789,14 @@ function accountTypeLabel(value: string) {
     MANUAL: "수동입력"
   };
   return labels[value] ?? value;
+}
+
+function providerLabel(provider: AuthUser["providers"][number]) {
+  const labels: Record<AuthUser["providers"][number], string> = {
+    KAKAO: "카카오",
+    NAVER: "네이버"
+  };
+  return labels[provider] ?? provider;
 }
 
 function formatDateTime(value?: string | null) {

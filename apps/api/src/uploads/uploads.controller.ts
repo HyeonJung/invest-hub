@@ -1,4 +1,5 @@
-import { Body, Controller, Headers, Post, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Post, Req, UploadedFile, UseInterceptors } from "@nestjs/common";
+import type { Request } from "express";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { AuthService } from "../auth/auth.service";
 import { UploadsService } from "./uploads.service";
@@ -15,9 +16,9 @@ export class UploadsController {
   async preview(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: { broker: string; accountType: string },
-    @Headers("authorization") authorization?: string
+    @Req() request: Request
   ) {
-    await this.authService.userIdFromToken(authorization);
+    await this.authService.userIdFromRequest(request);
     return this.uploadsService.preview(file, body.broker, body.accountType);
   }
 
@@ -30,9 +31,9 @@ export class UploadsController {
       accountAlias: string;
       rows: NormalizedUploadRow[];
     },
-    @Headers("authorization") authorization?: string
+    @Req() request: Request
   ) {
-    const userId = await this.authService.userIdFromToken(authorization);
+    const userId = await this.authService.userIdFromRequest(request);
     return this.uploadsService.commit(userId, body);
   }
 }

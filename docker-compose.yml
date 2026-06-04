@@ -4,7 +4,19 @@ x-api-env: &api-env
   DATABASE_URL: postgresql://investhub:investhub@postgres:5432/investhub?schema=public
   API_PORT: 4000
   FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000,http://127.0.0.1:3000}
+  APP_URL: ${APP_URL:-http://localhost:3000}
+  API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4000}
+  AUTH_COOKIE_NAME: ${AUTH_COOKIE_NAME:-invest_hub_session}
+  JWT_SECRET: ${JWT_SECRET:-invest-hub-local-session-secret}
+  SESSION_SECRET: ${SESSION_SECRET:-invest-hub-local-session-secret}
   TOSS_CREDENTIAL_SECRET: ${TOSS_CREDENTIAL_SECRET:-invest-hub-local-dev-credential-secret}
+  CREDENTIAL_ENCRYPTION_SECRET: ${CREDENTIAL_ENCRYPTION_SECRET:-invest-hub-local-dev-credential-secret}
+  KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID:-}
+  KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
+  KAKAO_REDIRECT_URI: ${KAKAO_REDIRECT_URI:-}
+  NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
+  NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+  NAVER_REDIRECT_URI: ${NAVER_REDIRECT_URI:-}
   USD_KRW_RATE: ${USD_KRW_RATE:-1516.5}
   MARKET_DATA_PROVIDER: ${MARKET_DATA_PROVIDER:-real}
   REDIS_URL: ${REDIS_URL:-}

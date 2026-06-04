@@ -1,23 +1,21 @@
-import { Controller, Get, Headers, Param } from "@nestjs/common";
-import { AuthService } from "../auth/auth.service";
+import { Controller, Get, Param, UseGuards } from "@nestjs/common";
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { AuthGuard } from "../auth/guards/auth.guard";
+import type { AuthenticatedUser } from "../auth/oauth.types";
 import { PortfolioService } from "./portfolio.service";
 
 @Controller("portfolio")
+@UseGuards(AuthGuard)
 export class PortfolioController {
-  constructor(
-    private readonly authService: AuthService,
-    private readonly portfolioService: PortfolioService
-  ) {}
+  constructor(private readonly portfolioService: PortfolioService) {}
 
   @Get("summary")
-  async summary(@Headers("authorization") authorization?: string) {
-    const userId = await this.authService.userIdFromToken(authorization);
-    return this.portfolioService.getSummary(userId);
+  async summary(@CurrentUser() user: AuthenticatedUser) {
+    return this.portfolioService.getSummary(user.id);
   }
 
   @Get("brokers/:broker")
-  async broker(@Param("broker") broker: string, @Headers("authorization") authorization?: string) {
-    const userId = await this.authService.userIdFromToken(authorization);
-    return this.portfolioService.getBrokerPortfolio(userId, broker);
+  async broker(@Param("broker") broker: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.portfolioService.getBrokerPortfolio(user.id, broker);
   }
 }

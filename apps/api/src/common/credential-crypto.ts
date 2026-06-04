@@ -29,6 +29,10 @@ export function previewCredentialSecret(secret: string) {
 }
 
 function getKey() {
-  const raw = process.env.TOSS_CREDENTIAL_SECRET ?? "invest-hub-local-dev-credential-secret";
+  const raw =
+    process.env.CREDENTIAL_ENCRYPTION_SECRET ??
+    process.env.TOSS_CREDENTIAL_SECRET ??
+    process.env.SESSION_SECRET ??
+    "invest-hub-local-dev-credential-secret";
   return createHash("sha256").update(raw).digest();
 }

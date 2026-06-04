@@ -1,4 +1,5 @@
-import { Controller, Get, Headers, Post } from "@nestjs/common";
+import { Controller, Get, Post, Req } from "@nestjs/common";
+import type { Request } from "express";
 import { AuthService } from "../auth/auth.service";
 import { PricesService } from "./prices.service";
 
@@ -10,14 +11,14 @@ export class PricesController {
   ) {}
 
   @Get("status")
-  async status(@Headers("authorization") authorization?: string) {
-    const userId = await this.authService.userIdFromToken(authorization);
+  async status(@Req() request: Request) {
+    const userId = await this.authService.userIdFromRequest(request);
     return this.pricesService.getStatus(userId);
   }
 
   @Post("refresh")
-  async refresh(@Headers("authorization") authorization?: string) {
-    const userId = await this.authService.userIdFromToken(authorization);
+  async refresh(@Req() request: Request) {
+    const userId = await this.authService.userIdFromRequest(request);
     return this.pricesService.refreshUserPrices(userId);
   }
 }

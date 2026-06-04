@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Req } from "@nestjs/common";
+import type { Request } from "express";
 import { AuthService } from "../auth/auth.service";
 import { SettingsService } from "./settings.service";
 
@@ -10,101 +11,101 @@ export class SettingsController {
   ) {}
 
   @Get("targets")
-  async listTargets(@Headers("authorization") authorization?: string) {
-    const userId = await this.authService.userIdFromToken(authorization);
+  async listTargets(@Req() request: Request) {
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.listTargets(userId);
   }
 
   @Post("targets")
   async saveTargets(
     @Body() body: { targets: Array<{ targetType: string; targetKey: string; targetWeight: number }> },
-    @Headers("authorization") authorization?: string
+    @Req() request: Request
   ) {
-    const userId = await this.authService.userIdFromToken(authorization);
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.saveTargets(userId, body.targets);
   }
 
   @Get("toss-credentials")
-  async listTossCredentials(@Headers("authorization") authorization?: string) {
-    const userId = await this.authService.userIdFromToken(authorization);
+  async listTossCredentials(@Req() request: Request) {
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.listTossCredentials(userId);
   }
 
   @Post("toss-accounts")
   async createTossAccount(
     @Body() body: { accountAlias?: string; accountType?: "BROKERAGE" | "PENSION_SAVINGS" | "ISA" | "MANUAL"; externalAccountId?: string },
-    @Headers("authorization") authorization?: string
+    @Req() request: Request
   ) {
-    const userId = await this.authService.userIdFromToken(authorization);
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.createTossAccount(userId, body);
   }
 
   @Post("toss-credentials")
   async saveTossCredential(
     @Body() body: { accountId: string; clientId: string; clientSecret?: string },
-    @Headers("authorization") authorization?: string
+    @Req() request: Request
   ) {
-    const userId = await this.authService.userIdFromToken(authorization);
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.saveTossCredential(userId, body);
   }
 
   @Delete("toss-credentials/:accountId")
   async deleteTossCredential(
     @Param("accountId") accountId: string,
-    @Headers("authorization") authorization?: string
+    @Req() request: Request
   ) {
-    const userId = await this.authService.userIdFromToken(authorization);
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.deleteTossCredential(userId, accountId);
   }
 
   @Get("kiwoom-credential")
-  async getKiwoomCredential(@Headers("authorization") authorization?: string) {
-    const userId = await this.authService.userIdFromToken(authorization);
+  async getKiwoomCredential(@Req() request: Request) {
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.getKiwoomCredential(userId);
   }
 
   @Get("kiwoom-credentials")
-  async listKiwoomCredentials(@Headers("authorization") authorization?: string) {
-    const userId = await this.authService.userIdFromToken(authorization);
+  async listKiwoomCredentials(@Req() request: Request) {
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.listKiwoomCredentials(userId);
   }
 
   @Post("kiwoom-credential")
   async saveKiwoomCredential(
     @Body() body: { connectionId?: string; label?: string; appKey: string; secretKey?: string; useMock?: boolean },
-    @Headers("authorization") authorization?: string
+    @Req() request: Request
   ) {
-    const userId = await this.authService.userIdFromToken(authorization);
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.saveKiwoomCredential(userId, body);
   }
 
   @Post("kiwoom-credentials")
   async saveKiwoomCredentialProfile(
     @Body() body: { connectionId?: string; label?: string; appKey: string; secretKey?: string; useMock?: boolean },
-    @Headers("authorization") authorization?: string
+    @Req() request: Request
   ) {
-    const userId = await this.authService.userIdFromToken(authorization);
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.saveKiwoomCredentialProfile(userId, body);
   }
 
   @Delete("kiwoom-credential")
-  async deleteKiwoomCredential(@Headers("authorization") authorization?: string) {
-    const userId = await this.authService.userIdFromToken(authorization);
+  async deleteKiwoomCredential(@Req() request: Request) {
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.deleteKiwoomCredential(userId);
   }
 
   @Delete("kiwoom-credentials/:connectionId")
   async deleteKiwoomCredentialProfile(
     @Param("connectionId") connectionId: string,
-    @Headers("authorization") authorization?: string
+    @Req() request: Request
   ) {
-    const userId = await this.authService.userIdFromToken(authorization);
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.deleteKiwoomCredentialProfile(userId, connectionId);
   }
 
   @Get("namuh-credentials")
-  async listNamuhCredentials(@Headers("authorization") authorization?: string) {
-    const userId = await this.authService.userIdFromToken(authorization);
+  async listNamuhCredentials(@Req() request: Request) {
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.listNamuhCredentials(userId);
   }
 
@@ -121,18 +122,18 @@ export class SettingsController {
       certificateMode?: "PC" | "CLOUD";
       environment?: "REAL" | "MOCK";
     },
-    @Headers("authorization") authorization?: string
+    @Req() request: Request
   ) {
-    const userId = await this.authService.userIdFromToken(authorization);
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.saveNamuhCredentialProfile(userId, body);
   }
 
   @Delete("namuh-credentials/:connectionId")
   async deleteNamuhCredentialProfile(
     @Param("connectionId") connectionId: string,
-    @Headers("authorization") authorization?: string
+    @Req() request: Request
   ) {
-    const userId = await this.authService.userIdFromToken(authorization);
+    const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.deleteNamuhCredentialProfile(userId, connectionId);
   }
 }

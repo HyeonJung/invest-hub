@@ -1,4 +1,5 @@
-import { Body, Controller, Headers, Post } from "@nestjs/common";
+import { Body, Controller, Post, Req } from "@nestjs/common";
+import type { Request } from "express";
 import { AuthService } from "../auth/auth.service";
 import { RebalanceService } from "./rebalance.service";
 
@@ -12,9 +13,9 @@ export class RebalanceController {
   @Post()
   async calculate(
     @Body() body: { targets: Array<{ targetType: string; targetKey: string; targetWeight: number }> },
-    @Headers("authorization") authorization?: string
+    @Req() request: Request
   ) {
-    const userId = await this.authService.userIdFromToken(authorization);
+    const userId = await this.authService.userIdFromRequest(request);
     return this.rebalanceService.calculate(userId, body.targets);
   }
 }

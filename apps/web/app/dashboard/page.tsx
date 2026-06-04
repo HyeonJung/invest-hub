@@ -72,6 +72,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { Input } from "@/components/ui/input";
 import {
+  buildFearGreedAlerts,
+  FEAR_GREED_META,
+  FearGreedBadge,
+  getFearGreedInsight,
+  getFearGreedLevel,
+  getFearGreedMeta,
+  type FearGreedLevel
+} from "@/components/fear-greed-badge";
+import {
   DEFAULT_LOSS_STICKER_MODE,
   DEFAULT_PROFIT_STICKER_MODE,
   LossStickerBadge,
@@ -280,13 +289,13 @@ export default function DashboardPage() {
         {view === "upload" ? <UploadManager token={token} /> : null}
         {view === "settings" ? <SettingsPanel token={token} /> : null}
         {view === "rebalance" ? <RebalancePanel token={token} /> : null}
-        {view === "ai" ? <AiPanel token={token} /> : null}
+        {view === "ai" ? <AiPanel token={token} marketIndicators={marketIndicatorsQuery.data} /> : null}
         {view === "dividend" ? <SimpleAnalysisPanel token={token} kind="dividend" /> : null}
         {view === "tax" ? <SimpleAnalysisPanel token={token} kind="tax" /> : null}
         {view === "market" ? (
           <MarketPanel data={marketIndicatorsQuery.data} loading={marketIndicatorsQuery.isFetching} error={(marketIndicatorsQuery.error as Error | null) ?? null} />
         ) : null}
-        {view === "alerts" ? <AlertCenterPanel summary={summaryQuery.data} onNavigate={navigate} /> : null}
+        {view === "alerts" ? <AlertCenterPanel summary={summaryQuery.data} marketIndicators={marketIndicatorsQuery.data} onNavigate={navigate} /> : null}
       </main>
       <AccountConnectionModal open={connectModalOpen} onClose={() => setConnectModalOpen(false)} onChoose={handleConnectChoice} />
     </div>
@@ -641,6 +650,8 @@ function MarketPanel({
   loading: boolean;
   error: Error | null;
 }) {
+  const fearGreed = findFearGreedIndicator(data);
+
   return (
     <motion.div className="space-y-5" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
       <section className="hero-card rounded-[28px] p-6">
@@ -649,15 +660,27 @@ function MarketPanel({
         <p className="mt-2 text-sm font-semibold text-[var(--text-secondary)]">환율, 금리, 원자재, 지수, 비트코인을 한 화면에서 봅니다.</p>
       </section>
       <MarketIndicatorsWidget data={data} loading={loading} error={error} />
+      {fearGreed ? <FearGreedDetailCard indicator={fearGreed} /> : null}
     </motion.div>
   );
 }
 
-function AlertCenterPanel({ summary, onNavigate }: { summary?: PortfolioSummary; onNavigate: (view: ViewKey) => void }) {
+function AlertCenterPanel({
+  summary,
+  marketIndicators,
+  onNavigate
+}: {
+  summary?: PortfolioSummary;
+  marketIndicators?: MarketIndicatorsResult;
+  onNavigate: (view: ViewKey) => void;
+}) {
   const topHolding = summary?.topHoldings[0];
   const fxExposure = summary?.metrics.fxExposureRate ?? 0;
   const dividend = summary?.metrics.annualDividendEstimate ?? 0;
+  const fearGreed = findFearGreedIndicator(marketIndicators);
+  const fearGreedAlerts = fearGreed ? buildFearGreedAlerts(fearGreed.value, fearGreed.change).map((alert) => ({ ...alert, action: "market" as ViewKey })) : [];
   const alerts = [
+    ...fearGreedAlerts,
     {
       title: topHolding ? `${topHolding.symbol} 비중 확인` : "상위 종목 비중 확인",
       description: topHolding ? `${topHolding.name} 평가금액이 ${formatKrw(topHolding.marketValue)}입니다.` : "계좌를 연결하면 집중도 알림을 계산합니다.",
@@ -698,7 +721,8 @@ function AlertCenterPanel({ summary, onNavigate }: { summary?: PortfolioSummary;
                 "mb-4 block h-2 w-2 rounded-full",
                 alert.tone === "red" && "bg-red-400",
                 alert.tone === "blue" && "bg-blue-400",
-                alert.tone === "green" && "bg-emerald-400"
+                alert.tone === "green" && "bg-emerald-400",
+                alert.tone === "orange" && "bg-orange-400"
               )}
             />
             <p className="text-base font-black text-[var(--text-primary)]">{alert.title}</p>
@@ -748,7 +772,7 @@ function Overview({
     >
       <div className="min-w-0 space-y-4">
         <OverviewHero data={data} />
-        <MarketIndicatorsWidget data={marketIndicators} loading={marketIndicatorsLoading} error={marketIndicatorsError} />
+        <MarketIndicatorsWidget data={marketIndicators} loading={marketIndicatorsLoading} error={marketIndicatorsError} onMore={() => onNavigate("market")} />
         <section className="grid min-w-0 gap-4 min-[1536px]:grid-cols-3">
           <AllocationCard title="자산 구성 비중" data={assetAllocationFromHoldings(data.holdings)} center={formatKrw(data.metrics.totalMarketValue)} />
           <AccountValueCards data={data.accountValues} />
@@ -757,7 +781,7 @@ function Overview({
         <section className="grid min-w-0 gap-4 min-[1536px]:grid-cols-3">
           <TopHoldings data={data} />
           <DuplicateHoldings data={data} />
-          <AiInsightCard data={data} onNavigate={onNavigate} />
+          <AiInsightCard data={data} marketIndicators={marketIndicators} onNavigate={onNavigate} />
         </section>
       </div>
     </motion.div>
@@ -1031,11 +1055,13 @@ function KpiCard({
 function MarketIndicatorsWidget({
   data,
   loading,
-  error
+  error,
+  onMore
 }: {
   data?: MarketIndicatorsResult;
   loading: boolean;
   error: Error | null;
+  onMore?: () => void;
 }) {
   const indicators = sortMarketIndicators(data?.indicators ?? []);
   const delayedCount = indicators.filter((indicator) => indicator.isDelayed).length;
@@ -1050,7 +1076,7 @@ function MarketIndicatorsWidget({
         <div className="flex shrink-0 items-center gap-3 text-[12px] font-medium text-[var(--text-secondary)]">
           <span className="numeric">{formatHeaderTime(data?.lastSuccessAt)} 기준</span>
           {loading ? <Loader2 className="h-4 w-4 animate-spin text-[#3B82F6]" /> : <CheckCircle2 className="h-4 w-4 text-[#22C55E]" />}
-          <button className="flex items-center gap-1 text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]" onClick={() => alert("좌측 메뉴의 시장 지표 화면에서 전체 지표를 확인할 수 있습니다.")}>
+          <button className="flex items-center gap-1 text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]" onClick={onMore ?? (() => alert("시장 지표 화면에서 전체 지표를 확인할 수 있습니다."))}>
             더보기
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -1083,6 +1109,10 @@ function MarketIndicatorsWidget({
 }
 
 function MarketIndicatorCard({ indicator }: { indicator: MarketIndicatorsResult["indicators"][number] }) {
+  if (indicator.symbol === "FEAR_GREED") {
+    return <FearGreedMarketIndicatorCard indicator={indicator} />;
+  }
+
   const tone = marketIndicatorTone(indicator);
   const positive = indicator.change > 0;
   const negative = indicator.change < 0;
@@ -1118,6 +1148,110 @@ function MarketIndicatorCard({ indicator }: { indicator: MarketIndicatorsResult[
         <MiniSparkline changeRate={indicator.changeRate} />
       </div>
     </motion.div>
+  );
+}
+
+function FearGreedMarketIndicatorCard({ indicator }: { indicator: MarketIndicatorsResult["indicators"][number] }) {
+  const meta = getFearGreedMeta(indicator.value);
+  const isStale = indicator.isDelayed || indicator.status === "DELAYED";
+
+  return (
+    <motion.div
+      className="market-indicator-card relative h-[92px] w-[172px] shrink-0 overflow-hidden rounded-xl border"
+      data-market-indicator-card
+      data-fear-greed-card
+      whileHover={{ y: -2, backgroundColor: "var(--surface-hover)" }}
+      transition={{ duration: 0.18 }}
+      style={{
+        borderColor: `${meta.color}32`,
+        backgroundColor: "var(--surface)"
+      }}
+    >
+      <div className="relative z-10 flex h-full min-w-0 items-center gap-2 p-3">
+        <FearGreedBadge value={indicator.value} size="sm" showValue={false} showLabel={false} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12px] font-medium leading-4 text-[var(--text-secondary)]">공포탐욕지수</p>
+          <div className="mt-1 flex min-w-0 items-end gap-1.5">
+            <p className="numeric text-[22px] font-black leading-none text-[var(--text-primary)]">{Math.round(indicator.value)}</p>
+            <p className="truncate text-[12px] font-black leading-4" style={{ color: meta.color }}>
+              {meta.labelKo}
+            </p>
+          </div>
+          <p className="mt-1 truncate text-[10px] font-semibold text-[var(--text-secondary)]">
+            {isStale ? "마지막 성공 값 유지" : `업데이트 ${formatHeaderTime(indicator.lastUpdatedAt)}`}
+          </p>
+        </div>
+      </div>
+      <div className="pointer-events-none absolute -right-7 -top-8 h-24 w-24 rounded-full opacity-60" style={{ backgroundColor: meta.softColor }} />
+    </motion.div>
+  );
+}
+
+function FearGreedDetailCard({ indicator }: { indicator: MarketIndicatorsResult["indicators"][number] }) {
+  const value = Math.max(0, Math.min(100, indicator.value));
+  const meta = getFearGreedMeta(value);
+  const level = getFearGreedLevel(value);
+  const levels = Object.keys(FEAR_GREED_META) as FearGreedLevel[];
+
+  return (
+    <Card className="overflow-hidden" data-fear-greed-detail>
+      <CardHeader>
+        <div>
+          <CardTitle>공포탐욕지수</CardTitle>
+          <p className="mt-1 text-sm font-semibold text-[var(--text-secondary)]">{indicator.source} 기준 시장 심리</p>
+        </div>
+        <span className="rounded-full px-3 py-1 text-xs font-black" style={{ backgroundColor: meta.softColor, color: meta.color }}>
+          {meta.range}
+        </span>
+      </CardHeader>
+      <CardContent>
+        <div className="grid min-w-0 gap-5 lg:grid-cols-[260px_minmax(0,1fr)] lg:items-center">
+          <div className="min-w-0 rounded-2xl p-4" style={{ backgroundColor: meta.softColor }}>
+            <FearGreedBadge value={value} size="lg" showDescription className="justify-center" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-end justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-black text-[var(--text-secondary)]">현재 단계</p>
+                <p className="mt-1 truncate text-2xl font-black text-[var(--text-primary)]">{meta.labelKo}</p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-secondary)]">{getFearGreedInsight(value)}</p>
+              </div>
+              <p className="numeric shrink-0 text-[44px] font-black leading-none" style={{ color: meta.color }}>
+                {Math.round(value)}
+              </p>
+            </div>
+            <div className="mt-5">
+              <div className="relative h-3 overflow-hidden rounded-full bg-[var(--surface-subtle)]">
+                <div className="h-full rounded-full transition-all" style={{ width: `${value}%`, backgroundColor: meta.color }} />
+              </div>
+              <div className="mt-2 grid grid-cols-5 text-center text-[11px] font-black text-[var(--text-muted)]">
+                <span>0</span>
+                <span>25</span>
+                <span>50</span>
+                <span>75</span>
+                <span>100</span>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-2 sm:grid-cols-5">
+              {levels.map((item) => {
+                const itemMeta = FEAR_GREED_META[item];
+                const active = item === level;
+                return (
+                  <div
+                    key={item}
+                    className={cn("min-w-0 rounded-xl border px-2 py-2 text-center", active ? "border-transparent" : "border-[var(--card-border)] bg-[var(--surface)]")}
+                    style={active ? { backgroundColor: itemMeta.softColor, color: itemMeta.color } : undefined}
+                  >
+                    <p className="truncate text-[11px] font-black">{itemMeta.labelKo}</p>
+                    <p className="numeric mt-1 text-[10px] font-semibold opacity-80">{itemMeta.range}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -2022,7 +2156,25 @@ function DuplicateHoldings({ data }: { data: PortfolioSummary }) {
   );
 }
 
-function AiInsightCard({ data, onNavigate }: { data: PortfolioSummary; onNavigate: (view: ViewKey) => void }) {
+function AiInsightCard({
+  data,
+  marketIndicators,
+  onNavigate
+}: {
+  data: PortfolioSummary;
+  marketIndicators?: MarketIndicatorsResult;
+  onNavigate: (view: ViewKey) => void;
+}) {
+  const fearGreed = findFearGreedIndicator(marketIndicators);
+  const fearGreedInsight = fearGreed
+    ? {
+        type: "info" as const,
+        title: "시장 심리",
+        description: getFearGreedInsight(fearGreed.value)
+      }
+    : null;
+  const insights = fearGreedInsight ? [fearGreedInsight, ...data.aiInsights] : data.aiInsights;
+
   return (
     <Card className="min-h-[326px]">
       <CardHeader>
@@ -2034,7 +2186,7 @@ function AiInsightCard({ data, onNavigate }: { data: PortfolioSummary; onNavigat
       <CardContent className="pt-1">
         <div className="rounded-xl bg-[var(--surface-subtle)] p-4">
           <ul className="space-y-2">
-          {data.aiInsights.map((insight) => {
+          {insights.map((insight) => {
             return (
               <li key={insight.title} className="flex gap-3 text-[13px] leading-6">
                 <span className={cn("mt-2 h-1.5 w-1.5 shrink-0 rounded-full", insight.type === "warning" && "bg-orange-300", insight.type === "info" && "bg-blue-300", insight.type === "success" && "bg-emerald-300")} />
@@ -3912,11 +4064,11 @@ function SettingsMini({
   );
 }
 
-function AiPanel({ token }: { token: string }) {
+function AiPanel({ token, marketIndicators }: { token: string; marketIndicators?: MarketIndicatorsResult }) {
   const query = useQuery({ queryKey: ["summary", "ai"], queryFn: () => api.summary(token) });
   if (query.isLoading) return <LoadingState />;
   if (query.isError) return <ErrorState message={(query.error as Error).message} onRetry={() => query.refetch()} />;
-  return query.data ? <AiInsightCard data={query.data} onNavigate={() => undefined} /> : null;
+  return query.data ? <AiInsightCard data={query.data} marketIndicators={marketIndicators} onNavigate={() => undefined} /> : null;
 }
 
 function SimpleAnalysisPanel({ token, kind }: { token: string; kind: "dividend" | "tax" }) {
@@ -4141,6 +4293,10 @@ function sortMarketIndicators(indicators: MarketIndicatorsResult["indicators"]) 
       return true;
     })
     .slice(0, 7);
+}
+
+function findFearGreedIndicator(data?: MarketIndicatorsResult) {
+  return data?.indicators.find((indicator) => indicator.symbol === "FEAR_GREED") ?? null;
 }
 
 function buildHeroChartData(_totalValue: number, todayChange: number) {
@@ -4425,14 +4581,7 @@ function marketIndicatorTone(indicator: MarketIndicatorsResult["indicators"][num
 }
 
 function fearGreedLabel(status: string) {
-  const labels: Record<string, string> = {
-    EXTREME_GREED: "Extreme Greed",
-    GREED: "Greed",
-    NEUTRAL: "Neutral",
-    FEAR: "Fear",
-    EXTREME_FEAR: "Extreme Fear"
-  };
-  return labels[status] ?? status;
+  return FEAR_GREED_META[status as FearGreedLevel]?.labelKo ?? status;
 }
 
 function formatSignedKrw(value: number) {

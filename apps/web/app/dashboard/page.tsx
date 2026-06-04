@@ -39,8 +39,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  Line as RechartsLine,
-  LineChart as RechartsLineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -243,7 +241,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="dashboard-shell flex h-screen w-screen overflow-hidden" data-dashboard-shell>
+    <div className="dashboard-shell flex h-screen w-screen overflow-hidden bg-[#F7F9FC]" data-dashboard-shell>
       <aside className="dashboard-sidebar hidden h-screen w-[240px] shrink-0 border-r lg:block" data-sidebar>
         <Sidebar
           active={view}
@@ -253,49 +251,51 @@ export default function DashboardPage() {
           onLogout={() => logout(router, notify)}
         />
       </aside>
-      <main className="dashboard-main min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 lg:px-6 2xl:px-8" data-main-content>
-        <Header
+      <main className="dashboard-main min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-7 lg:px-9 2xl:px-10" data-main-content>
+        <div className="mx-auto min-w-0 max-w-[1440px] space-y-6">
+          <Header
           view={view}
           onChange={navigate}
           onRefresh={refreshPricesNow}
           priceRefreshing={priceRefreshQuery.isFetching}
-          lastSuccessAt={priceRefreshQuery.data?.lastSuccessAt ?? null}
         />
-        {(priceRefreshQuery.error || (priceRefreshQuery.data?.errors?.length ?? 0) > 0) ? (
-          <PriceRefreshStatus
-            data={priceRefreshQuery.data}
-            loading={priceRefreshQuery.isFetching}
-            error={(priceRefreshQuery.error as Error | null) ?? null}
-          />
-        ) : null}
-        {view === "overview" ? (
-          <Overview
-            token={token}
-            onNavigate={navigate}
-            marketIndicators={marketIndicatorsQuery.data}
-            marketIndicatorsLoading={marketIndicatorsQuery.isFetching}
-            marketIndicatorsError={(marketIndicatorsQuery.error as Error | null) ?? null}
-          />
-        ) : null}
-        {isAccountView(view) ? (
-          summaryQuery.isLoading ? (
-            <LoadingState label="계좌 데이터를 불러오고 있습니다." />
-          ) : selectedAccount && summaryQuery.data ? (
-            <AccountDashboard account={selectedAccount} summary={summaryQuery.data} onNavigate={navigate} />
-          ) : (
-            <EmptyState title="계좌를 찾을 수 없습니다." description="계좌 연결 또는 업로드 후 다시 선택하세요." />
-          )
-        ) : null}
-        {view === "upload" ? <UploadManager token={token} /> : null}
-        {view === "settings" ? <SettingsPanel token={token} /> : null}
-        {view === "rebalance" ? <RebalancePanel token={token} /> : null}
-        {view === "ai" ? <AiPanel token={token} marketIndicators={marketIndicatorsQuery.data} /> : null}
-        {view === "dividend" ? <SimpleAnalysisPanel token={token} kind="dividend" /> : null}
-        {view === "tax" ? <SimpleAnalysisPanel token={token} kind="tax" /> : null}
-        {view === "market" ? (
-          <MarketPanel data={marketIndicatorsQuery.data} loading={marketIndicatorsQuery.isFetching} error={(marketIndicatorsQuery.error as Error | null) ?? null} />
-        ) : null}
-        {view === "alerts" ? <AlertCenterPanel summary={summaryQuery.data} marketIndicators={marketIndicatorsQuery.data} onNavigate={navigate} /> : null}
+          {view !== "overview" && (priceRefreshQuery.error || (priceRefreshQuery.data?.errors?.length ?? 0) > 0) ? (
+            <PriceRefreshStatus
+              data={priceRefreshQuery.data}
+              loading={priceRefreshQuery.isFetching}
+              error={(priceRefreshQuery.error as Error | null) ?? null}
+            />
+          ) : null}
+          {view === "overview" ? (
+            <Overview
+              token={token}
+              onNavigate={navigate}
+              marketIndicators={marketIndicatorsQuery.data}
+              marketIndicatorsLoading={marketIndicatorsQuery.isFetching}
+              marketIndicatorsError={(marketIndicatorsQuery.error as Error | null) ?? null}
+              priceStatus={priceRefreshQuery.data}
+            />
+          ) : null}
+          {isAccountView(view) ? (
+            summaryQuery.isLoading ? (
+              <LoadingState label="계좌 데이터를 불러오고 있습니다." />
+            ) : selectedAccount && summaryQuery.data ? (
+              <AccountDashboard account={selectedAccount} summary={summaryQuery.data} onNavigate={navigate} />
+            ) : (
+              <EmptyState title="계좌를 찾을 수 없습니다." description="계좌 연결 또는 업로드 후 다시 선택하세요." />
+            )
+          ) : null}
+          {view === "upload" ? <UploadManager token={token} /> : null}
+          {view === "settings" ? <SettingsPanel token={token} /> : null}
+          {view === "rebalance" ? <RebalancePanel token={token} /> : null}
+          {view === "ai" ? <AiPanel token={token} marketIndicators={marketIndicatorsQuery.data} /> : null}
+          {view === "dividend" ? <SimpleAnalysisPanel token={token} kind="dividend" /> : null}
+          {view === "tax" ? <SimpleAnalysisPanel token={token} kind="tax" /> : null}
+          {view === "market" ? (
+            <MarketPanel data={marketIndicatorsQuery.data} loading={marketIndicatorsQuery.isFetching} error={(marketIndicatorsQuery.error as Error | null) ?? null} />
+          ) : null}
+          {view === "alerts" ? <AlertCenterPanel summary={summaryQuery.data} marketIndicators={marketIndicatorsQuery.data} onNavigate={navigate} /> : null}
+        </div>
       </main>
       <AccountConnectionModal open={connectModalOpen} onClose={() => setConnectModalOpen(false)} onChoose={handleConnectChoice} />
     </div>
@@ -334,125 +334,55 @@ function Sidebar({
   onConnectAccount: () => void;
   onLogout: () => void;
 }) {
-  const accountGroups = buildBrokerAccountGroups(accounts);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    setOpenGroups((current) => {
-      const next = { ...current };
-      for (const group of accountGroups) {
-        next[group.broker] = next[group.broker] ?? true;
-      }
-      return next;
-    });
-  }, [accountGroups.map((group) => `${group.broker}:${group.accounts.length}`).join("|")]);
+  const firstAccount = accounts[0]?.key;
+  const navItems: Array<{ label: string; icon: ElementType; target: ViewKey; active: boolean; badge?: string }> = [
+    { label: "대시보드", icon: BriefcaseBusiness, target: "overview", active: active === "overview" },
+    { label: "계좌", icon: Wallet, target: "upload", active: active === "upload" },
+    { label: "보유 종목", icon: BriefcaseBusiness, target: firstAccount ?? "upload", active: isAccountView(active) },
+    { label: "분석", icon: BarChart3, target: "ai", active: active === "ai" || active === "rebalance" || active === "dividend" || active === "tax" },
+    { label: "알림", icon: Bell, target: "alerts", active: active === "alerts", badge: "3" },
+    { label: "설정", icon: Settings, target: "settings", active: active === "settings" }
+  ];
 
   return (
-    <div className="flex h-full flex-col p-4">
-      <div className="flex h-11 items-center gap-3 px-1">
-        <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-white/95 shadow-[0_0_24px_rgba(59,130,246,0.28)]">
+    <div className="flex h-full flex-col px-4 py-6">
+      <div className="flex h-11 items-center gap-3 px-2">
+        <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-white shadow-[0_8px_22px_rgba(37,99,235,0.18)]">
           <img src="/favicon.svg" alt="Invest Hub" className="h-8 w-8" />
         </span>
-        <span className="text-[21px] font-bold text-[var(--text-primary)]">INVEST HUB</span>
+        <span className="text-[21px] font-black text-[#0F172A]">대시보드</span>
       </div>
-      <nav className="mt-6 min-h-0 flex-1 space-y-5 overflow-y-auto pr-1 premium-scrollbar">
-        <motion.button
-          onClick={() => onNavigate("overview")}
-          whileHover={{ x: 2 }}
-          transition={{ duration: 0.18 }}
-            className={cn(
-              "flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-semibold transition",
-              active === "overview" ? "theme-nav-active" : "theme-nav-idle"
-            )}
-        >
-          <BriefcaseBusiness className="h-4 w-4" />
-          종합 대시보드
-        </motion.button>
-
-        <section>
-          <div className="mb-3 flex items-center justify-between px-2">
-            <p className="text-[13px] font-medium text-[var(--text-muted)]">내 계좌</p>
-            <button
-              type="button"
-              className="theme-icon-button flex h-8 w-8 items-center justify-center rounded-lg transition"
-              onClick={onConnectAccount}
-              aria-label="계좌 연결"
-              title="계좌 연결"
+      <nav className="mt-8 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 premium-scrollbar">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <motion.button
+              key={item.label}
+              onClick={() => onNavigate(item.target)}
+              whileHover={{ x: 2 }}
+              transition={{ duration: 0.18 }}
+              className={cn(
+                "relative flex h-12 w-full items-center gap-3 rounded-xl px-4 text-left text-[15px] font-bold transition",
+                item.active ? "theme-nav-active" : "theme-nav-idle"
+              )}
             >
-              <Plus className="h-4 w-4" />
-            </button>
-          </div>
-          {accountGroups.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">
-              <p className="text-sm font-black text-[var(--text-primary)]">연결된 계좌 없음</p>
-              <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">API 연결 또는 CSV 업로드를 하면 계좌가 자동으로 생깁니다.</p>
-              <Button className="mt-3 w-full" size="sm" variant="dark" onClick={onConnectAccount}>
-                <Plus className="h-4 w-4" />
-                계좌 연결
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {accountGroups.map((group) => {
-                const Icon = brokerGroupIcon(group.broker);
-                const isOpen = openGroups[group.broker] ?? true;
-                return (
-                  <div key={group.broker} className="space-y-1">
-                    <button
-                      type="button"
-                      className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left transition hover:bg-[var(--surface-hover)]"
-                      onClick={() => setOpenGroups((current) => ({ ...current, [group.broker]: !isOpen }))}
-                    >
-                      <span className={cn("flex h-7 w-7 items-center justify-center rounded-lg text-white shadow-[0_8px_20px_rgba(0,0,0,0.22)]", brokerAccentClass(group.broker))}>
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--text-primary)]">
-                        {group.label} <span className="text-[var(--text-muted)]">({group.accounts.length})</span>
-                      </span>
-                      <ChevronDown className={cn("h-4 w-4 text-[var(--text-muted)] transition", !isOpen && "-rotate-90")} />
-                    </button>
-                    {isOpen ? (
-                      <div className="space-y-1 pl-2">
-                        {group.accounts.map((account) => {
-                          const isActive = active === account.key;
-                          return (
-                            <motion.button
-                              key={account.key}
-                              onClick={() => onNavigate(account.key)}
-                              whileHover={{ x: 2 }}
-                              transition={{ duration: 0.16 }}
-                              className={cn(
-                                "flex h-9 w-full items-center gap-3 rounded-lg px-3 text-left transition",
-                                isActive ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "theme-nav-idle"
-                              )}
-                            >
-                              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", account.profitLoss >= 0 ? "bg-red-400" : "bg-blue-400")} />
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-[12px] font-medium">{account.shortName}</span>
-                              </span>
-                            </motion.button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <Button className="mt-3 h-9 w-full rounded-lg text-[12px] font-medium" variant="dark" size="sm" onClick={onConnectAccount}>
-            <Plus className="h-4 w-4" />
-            계좌 연결하기
-          </Button>
-        </section>
-
+              <Icon className="h-5 w-5" />
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              {item.badge ? (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#FF4D5D] px-1.5 text-[11px] font-black text-white">
+                  {item.badge}
+                </span>
+              ) : null}
+            </motion.button>
+          );
+        })}
       </nav>
       <div className="mt-5 space-y-2 pb-1">
-        <Button className="h-10 w-full justify-start rounded-lg bg-transparent px-3 text-[13px] font-medium" variant="ghost" onClick={() => onNavigate("settings")}>
-          <Settings className="h-4 w-4" />
-          설정
+        <Button className="h-10 w-full justify-start rounded-xl bg-transparent px-4 text-[13px] font-bold text-[var(--text-secondary)]" variant="ghost" onClick={onConnectAccount}>
+          <Plus className="h-4 w-4" />
+          계좌 연결
         </Button>
-        <Button className="h-10 w-full justify-start rounded-lg bg-transparent px-3 text-[13px] font-medium" variant="ghost" onClick={onLogout}>
+        <Button className="h-10 w-full justify-start rounded-xl bg-transparent px-4 text-[13px] font-bold text-[var(--text-secondary)]" variant="ghost" onClick={onLogout}>
           <LogOut className="h-4 w-4" />
           로그아웃
         </Button>
@@ -465,42 +395,37 @@ function Header({
   view,
   onChange,
   onRefresh,
-  priceRefreshing,
-  lastSuccessAt
+  priceRefreshing
 }: {
   view: ViewKey;
   onChange: (view: ViewKey) => void;
   onRefresh: () => void;
   priceRefreshing: boolean;
-  lastSuccessAt: string | null;
 }) {
-  const title = view === "overview" ? "종합 대시보드" : navLabel(view);
+  const isOverview = view === "overview";
+  const title = isOverview ? "안녕하세요, 대장님 👋" : navLabel(view);
+  const description = isOverview ? "오늘도 성공 투자를 응원합니다!" : "필요한 정보를 간결하게 확인하세요";
 
   return (
-    <header className="mb-5 min-w-0 overflow-hidden">
+    <header className="min-w-0 overflow-hidden">
       <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <h1 className="text-[28px] font-bold leading-none text-[var(--text-primary)]">{title}</h1>
-          <p className="mt-2 text-[13px] font-normal text-[var(--text-secondary)]">모든 계좌의 자산 현황을 한눈에 확인하세요</p>
+          <h1 className="text-[26px] font-black leading-none tracking-[-0.01em] text-[#0F172A] dark:text-[var(--text-primary)]">{title}</h1>
+          <p className="mt-3 text-[15px] font-medium text-[#64748B] dark:text-[var(--text-secondary)]">{description}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-3">
-          <ThemeToggle />
-          <div className="theme-pill flex h-10 items-center gap-2 rounded-xl px-4 text-xs font-medium">
-            <span className={cn("h-2 w-2 rounded-full", priceRefreshing ? "animate-pulse bg-emerald-400" : "bg-emerald-500")} />
-            자동 갱신 중
-            <span className="numeric ml-3 text-[var(--text-muted)]">{formatHeaderTime(lastSuccessAt)}</span>
-          </div>
+          <ThemeToggle className="h-10 rounded-full" />
           <button
-            className="theme-icon-button relative flex h-10 w-10 items-center justify-center rounded-xl transition"
+            className="theme-icon-button relative flex h-10 w-10 items-center justify-center rounded-full transition"
             onClick={() => onChange("alerts")}
             aria-label="알림"
           >
             <Bell className="h-5 w-5" />
-            <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+            <span className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-[#FF4D5D] text-[10px] font-black text-white">
               3
             </span>
           </button>
-          <Button className="h-10 rounded-xl px-5 text-[13px] font-semibold" variant="outline" onClick={onRefresh} disabled={priceRefreshing}>
+          <Button className="h-10 rounded-xl px-6 text-[14px] font-bold" variant="outline" onClick={onRefresh} disabled={priceRefreshing}>
             {priceRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             2024.06.03 (월)
           </Button>
@@ -742,13 +667,15 @@ function Overview({
   onNavigate,
   marketIndicators,
   marketIndicatorsLoading,
-  marketIndicatorsError
+  marketIndicatorsError,
+  priceStatus
 }: {
   token: string;
   onNavigate: (view: ViewKey) => void;
   marketIndicators?: MarketIndicatorsResult;
   marketIndicatorsLoading: boolean;
   marketIndicatorsError: Error | null;
+  priceStatus?: PriceRefreshResult;
 }) {
   const query = useQuery({
     queryKey: ["summary"],
@@ -765,24 +692,23 @@ function Overview({
 
   return (
     <motion.div
-      className="min-w-0 space-y-4"
+      className="min-w-0 space-y-6"
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: "easeOut" }}
     >
-      <div className="min-w-0 space-y-4">
+      <div className="min-w-0 space-y-6">
         <OverviewHero data={data} />
-        <MarketIndicatorsWidget data={marketIndicators} loading={marketIndicatorsLoading} error={marketIndicatorsError} onMore={() => onNavigate("market")} />
-        <section className="grid min-w-0 gap-4 min-[1536px]:grid-cols-3">
+        <MarketIndicatorsWidget data={marketIndicators} loading={marketIndicatorsLoading} error={marketIndicatorsError} onMore={() => onNavigate("market")} mode="overview" />
+        <section className="grid min-w-0 gap-5 xl:grid-cols-2 min-[1440px]:grid-cols-3">
           <AllocationCard title="자산 구성 비중" data={assetAllocationFromHoldings(data.holdings)} center={formatKrw(data.metrics.totalMarketValue)} />
           <AccountValueCards data={data.accountValues} />
-          <ReturnBarCard data={data.accountReturns} average={data.metrics.returnRate} />
+          <TopHoldings data={data} onNavigate={onNavigate} />
         </section>
-        <section className="grid min-w-0 gap-4 min-[1536px]:grid-cols-3">
-          <TopHoldings data={data} />
-          <DuplicateHoldings data={data} />
-          <AiInsightCard data={data} marketIndicators={marketIndicators} onNavigate={onNavigate} />
-        </section>
+        <p className="flex min-w-0 items-center justify-between gap-4 px-1 text-[12px] font-medium text-[#94A3B8]">
+          <span className="truncate">데이터 제공: {priceStatus?.source ?? marketIndicators?.indicators[0]?.source ?? "실시간"}</span>
+          <span className="numeric shrink-0">{formatHeaderTime(priceStatus?.lastSuccessAt ?? marketIndicators?.lastSuccessAt)} 기준</span>
+        </p>
       </div>
     </motion.div>
   );
@@ -881,6 +807,7 @@ function AccountInsightRow({ label, value, tone }: { label: string; value: strin
 }
 
 function OverviewHero({ data }: { data: PortfolioSummary }) {
+  const [selectedRange, setSelectedRange] = useState("1W");
   const movement = data.todayAssetMovement ?? {
     stockImpact: 0,
     fxImpact: data.metrics.fxImpactAmount ?? 0,
@@ -888,74 +815,93 @@ function OverviewHero({ data }: { data: PortfolioSummary }) {
     totalChange: data.metrics.fxImpactAmount ?? 0
   };
   const profitTone = data.metrics.totalProfitLoss >= 0 ? "text-[#EF4444]" : "text-[#3B82F6]";
-  const todayTone = movement.totalChange >= 0 ? "text-[#22C55E]" : "text-[#3B82F6]";
+  const todayTone = movement.totalChange >= 0 ? "text-[#16A34A]" : "text-[#EF4444]";
   const heroChart = buildHeroChartData(data.metrics.totalMarketValue, movement.totalChange);
+  const values = heroChart.map((item) => item.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const padding = (max - min) * 0.15 || Math.max(1, max * 0.05);
+  const todayRate = (movement.totalChange / Math.max(1, data.metrics.totalMarketValue - movement.totalChange)) * 100;
 
   return (
-    <motion.section
-      className="hero-card relative min-h-[260px] min-w-0 overflow-hidden rounded-[18px] px-5 py-6 min-[1400px]:h-[260px] min-[1400px]:px-6 2xl:px-8"
-      data-hero-card
+    <motion.div
+      className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]"
+      data-hero-section
       initial={{ opacity: 0, scale: 0.985 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.55, ease: "easeOut" }}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_58%_50%,rgba(59,130,246,0.12),transparent_22rem)] dark:bg-[radial-gradient(circle_at_58%_50%,rgba(59,130,246,0.18),transparent_22rem)]" />
-      <div className="relative grid min-h-full min-w-0 grid-cols-1 gap-6 min-[1400px]:grid-cols-[360px_minmax(0,1fr)_260px]">
-        <div className="flex min-w-0 flex-col justify-center overflow-hidden" data-hero-summary>
-          <p className="text-[14px] font-medium text-[var(--text-secondary)]">내 총 자산</p>
-          <p className="numeric mt-6 block w-[360px] max-w-full overflow-hidden text-[40px] font-bold leading-none text-[var(--text-primary)]" data-hero-asset-value>
-            <AnimatedKrw value={data.metrics.totalMarketValue} />
-          </p>
-          <div className="mt-5 flex w-[360px] max-w-full items-end gap-3 overflow-hidden" data-hero-profit-row>
-            <p className={cn("numeric min-w-0 overflow-hidden text-[26px] font-bold leading-none", profitTone)}>
-              {formatSignedKrw(data.metrics.totalProfitLoss)}
-            </p>
-            <p className={cn("numeric shrink-0 pb-0.5 text-[18px] font-bold leading-none", profitTone)}>({formatPercent(data.metrics.returnRate)})</p>
+      <section className="hero-card min-h-[280px] min-w-0 overflow-hidden rounded-[20px] border border-[#E5EAF0] bg-white p-6 shadow-sm" data-hero-card>
+        <div className="grid h-full min-w-0 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="flex min-w-0 flex-col justify-between overflow-hidden py-1" data-hero-summary>
+            <div className="min-w-0">
+              <p className="text-[16px] font-black text-[#0F172A]">내 총 자산</p>
+              <p className="numeric mt-12 block min-w-[320px] max-w-full overflow-hidden text-[44px] font-black leading-none tracking-[-0.04em] text-[#0F172A]" data-hero-asset-value>
+                <AnimatedKrw value={data.metrics.totalMarketValue} />
+              </p>
+              <div className="mt-5 flex max-w-full items-end gap-3 overflow-hidden" data-hero-profit-row>
+                <p className={cn("numeric min-w-[184px] overflow-hidden text-[22px] font-black leading-none", profitTone)}>
+                  {formatSignedKrw(data.metrics.totalProfitLoss)}
+                </p>
+                <p className={cn("numeric shrink-0 text-[20px] font-black leading-none", profitTone)}>({formatPercent(data.metrics.returnRate)})</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-6 text-[13px]">
+              <span className="font-bold text-[#64748B]">전일 대비</span>
+              <span className={cn("numeric font-black", todayRate >= 0 ? "text-[#16A34A]" : "text-[#EF4444]")}>
+                {todayRate >= 0 ? "↗ " : "↘ "}
+                {formatPercent(todayRate)}
+              </span>
+            </div>
           </div>
-          <button className="theme-pill mt-7 flex h-8 w-fit items-center gap-2 rounded-full px-3 text-[12px] font-normal">
-            전일 대비
-          </button>
-        </div>
 
-        <div className="relative flex h-[180px] min-w-0 items-center overflow-hidden min-[1400px]:h-full" data-hero-chart>
-          <div className="theme-pill absolute right-0 top-0 z-10 flex h-8 items-center gap-2 rounded-xl px-3 text-[12px]">
-            전체 계좌
-            <ChevronDown className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+          <div className="relative min-h-[220px] min-w-0 overflow-hidden" data-hero-chart>
+            <div className="absolute right-0 top-0 z-10 flex items-center gap-1 text-[13px] font-bold text-[#475569]">
+              {["1D", "1W", "1M", "3M", "1Y"].map((range) => (
+                <button
+                  key={range}
+                  type="button"
+                  className={cn(
+                    "h-8 rounded-lg px-3 transition",
+                    selectedRange === range ? "bg-[#EFF6FF] text-[#2563EB] shadow-sm ring-1 ring-[#D9E7FF]" : "text-[#475569] hover:bg-[#F1F5F9]"
+                  )}
+                  onClick={() => setSelectedRange(range)}
+                >
+                  {range}
+                </button>
+              ))}
+            </div>
+            <div className="h-[220px] min-w-0 pt-10">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={heroChart} margin={{ top: 12, right: 10, bottom: 8, left: 10 }}>
+                  <defs>
+                    <linearGradient id="assetGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.22} />
+                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="name" hide />
+                  <YAxis hide domain={[min - padding, max + padding]} />
+                  <Area type="monotone" dataKey="value" stroke="#2563EB" strokeWidth={3} fill="url(#assetGradient)" dot={false} activeDot={false} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="pointer-events-none absolute left-8 right-4 top-1/2 h-28 -translate-y-1/2 rounded-full bg-[#3B82F6]/15 blur-3xl dark:bg-[#3B82F6]/25" />
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={heroChart} margin={{ top: 18, right: 8, bottom: 10, left: 8 }}>
-              <defs>
-                <linearGradient id="heroLineFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.32} />
-                  <stop offset="80%" stopColor="#3B82F6" stopOpacity={0} />
-                </linearGradient>
-                <filter id="heroGlow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="4" result="coloredBlur" />
-                  <feMerge>
-                    <feMergeNode in="coloredBlur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
-              <Area type="monotone" dataKey="value" stroke="#5B7CFF" strokeWidth={3} fill="url(#heroLineFill)" dot={false} activeDot={false} filter="url(#heroGlow)" />
-            </AreaChart>
-          </ResponsiveContainer>
         </div>
+      </section>
 
-        <div className="flex min-w-0 flex-col justify-center overflow-hidden pl-0 min-[1400px]:pl-2" data-hero-today>
-          <p className="text-[14px] font-medium text-[var(--text-secondary)]">오늘 자산 변동</p>
-          <p className={cn("numeric mt-2 block w-[240px] max-w-full overflow-hidden text-[26px] font-bold leading-none", todayTone)}>{formatSignedKrw(movement.totalChange)}</p>
-          <p className={cn("numeric mt-1 block w-[180px] max-w-full overflow-hidden text-[16px] font-bold", todayTone)}>({formatPercent(movement.totalChange / Math.max(1, data.metrics.totalMarketValue) * 100)})</p>
-          <div className="mt-4 space-y-2 text-[13px]">
-            <HeroMovementRow label="주가 영향" value={movement.stockImpact} />
-            <HeroMovementRow label="환율 영향" value={movement.fxImpact} />
-            <HeroMovementRow label="배당 영향" value={movement.dividendImpact} />
-          </div>
-          <p className="mt-4 text-[12px] font-normal text-[var(--text-muted)]">조회 시간 {formatHeaderTime(new Date().toISOString())} 기준</p>
+      <section className="hero-card min-h-[280px] min-w-0 overflow-hidden rounded-[20px] border border-[#E5EAF0] bg-white p-7 shadow-sm" data-today-change-card>
+        <p className="text-[18px] font-black text-[#0F172A]">오늘 자산 변동</p>
+        <p className={cn("numeric mt-7 block max-w-full overflow-hidden text-[30px] font-black leading-none", todayTone)}>{formatSignedKrw(movement.totalChange)}</p>
+        <p className={cn("numeric mt-3 block text-[15px] font-black", todayTone)}>({formatPercent(todayRate)})</p>
+        <div className="mt-7 space-y-4 text-[13px]">
+          <HeroMovementRow label="주가 영향" value={movement.stockImpact} />
+          <HeroMovementRow label="환율 영향" value={movement.fxImpact} />
+          <HeroMovementRow label="배당 영향" value={movement.dividendImpact} />
         </div>
-      </div>
-    </motion.section>
+        <p className="mt-7 text-[13px] font-medium text-[#64748B]">조회 시간 {formatHeaderTime(new Date().toISOString())} 기준</p>
+      </section>
+    </motion.div>
   );
 }
 
@@ -1056,33 +1002,36 @@ function MarketIndicatorsWidget({
   data,
   loading,
   error,
-  onMore
+  onMore,
+  mode = "full"
 }: {
   data?: MarketIndicatorsResult;
   loading: boolean;
   error: Error | null;
   onMore?: () => void;
+  mode?: "overview" | "full";
 }) {
-  const indicators = sortMarketIndicators(data?.indicators ?? []);
+  const indicators = mode === "overview" ? selectDashboardMarketIndicators(data?.indicators ?? []) : sortMarketIndicators(data?.indicators ?? []);
   const delayedCount = indicators.filter((indicator) => indicator.isDelayed).length;
   const messages = [error?.message, ...(data?.errors ?? [])].filter(Boolean);
+  const skeletonCount = mode === "overview" ? 6 : 7;
 
   return (
-    <section className="market-widget min-w-0 overflow-hidden rounded-[18px] p-3" data-market-widget>
-      <div className="flex min-w-0 items-center justify-between gap-3 px-1">
+    <section className="market-widget min-w-0 overflow-hidden rounded-[20px] border border-[#E5EAF0] bg-white p-5 shadow-sm" data-market-widget>
+      <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-[20px] font-semibold leading-none text-[var(--text-primary)]">시장 주요 지표</h2>
+          <h2 className="text-[20px] font-black leading-none text-[#0F172A] dark:text-[var(--text-primary)]">시장 주요 지표</h2>
         </div>
-        <div className="flex shrink-0 items-center gap-3 text-[12px] font-medium text-[var(--text-secondary)]">
-          <span className="numeric">{formatHeaderTime(data?.lastSuccessAt)} 기준</span>
+        <div className="flex shrink-0 items-center gap-3 text-[12px] font-bold text-[#64748B] dark:text-[var(--text-secondary)]">
+          {mode === "full" ? <span className="numeric">{formatHeaderTime(data?.lastSuccessAt)} 기준</span> : null}
           {loading ? <Loader2 className="h-4 w-4 animate-spin text-[#3B82F6]" /> : <CheckCircle2 className="h-4 w-4 text-[#22C55E]" />}
-          <button className="flex items-center gap-1 text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]" onClick={onMore ?? (() => alert("시장 지표 화면에서 전체 지표를 확인할 수 있습니다."))}>
-            더보기
+          <button className="flex h-8 items-center gap-1 rounded-lg border border-[#E5EAF0] bg-white px-3 text-[12px] font-bold text-[#64748B] shadow-sm transition hover:bg-[#F8FAFC] hover:text-[#0F172A]" onClick={onMore ?? (() => alert("시장 지표 화면에서 전체 지표를 확인할 수 있습니다."))}>
+            전체 보기
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>
-      {messages.length > 0 ? (
+      {mode === "full" && messages.length > 0 ? (
         <div className="mt-3 flex gap-2 rounded-xl border border-orange-400/20 bg-orange-500/10 px-4 py-3 text-sm text-orange-700 dark:text-orange-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
@@ -1092,15 +1041,15 @@ function MarketIndicatorsWidget({
         </div>
       ) : null}
       {indicators.length === 0 ? (
-        <div className="mt-3 flex w-full min-w-0 gap-3 overflow-x-auto premium-scrollbar">
-          {Array.from({ length: 7 }).map((_, index) => (
-            <div key={index} className="h-[92px] w-[156px] shrink-0 animate-pulse rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)]" />
+        <div className={cn("min-w-0 gap-3", mode === "overview" ? "grid sm:grid-cols-2 xl:grid-cols-3 min-[1400px]:grid-cols-6" : "flex overflow-x-auto pb-1 premium-scrollbar")}>
+          {Array.from({ length: skeletonCount }).map((_, index) => (
+            <div key={index} className={cn("h-[88px] animate-pulse rounded-[14px] border border-[#E5EAF0] bg-[#F8FAFC]", mode === "full" && "w-[156px] shrink-0")} />
           ))}
         </div>
       ) : (
-        <div className="mt-3 flex w-full min-w-0 gap-3 overflow-x-auto pb-1 premium-scrollbar" data-market-strip>
+        <div className={cn("w-full min-w-0 gap-3", mode === "overview" ? "grid sm:grid-cols-2 xl:grid-cols-3 min-[1400px]:grid-cols-6" : "flex overflow-x-auto pb-1 premium-scrollbar")} data-market-strip>
           {indicators.map((indicator) => (
-            <MarketIndicatorCard key={indicator.symbol} indicator={indicator} />
+            <MarketIndicatorCard key={indicator.symbol} indicator={indicator} className={mode === "overview" ? "w-full" : "w-[156px] shrink-0"} />
           ))}
         </div>
       )}
@@ -1108,44 +1057,32 @@ function MarketIndicatorsWidget({
   );
 }
 
-function MarketIndicatorCard({ indicator }: { indicator: MarketIndicatorsResult["indicators"][number] }) {
+function MarketIndicatorCard({ indicator, className }: { indicator: MarketIndicatorsResult["indicators"][number]; className?: string }) {
   if (indicator.symbol === "FEAR_GREED") {
     return <FearGreedMarketIndicatorCard indicator={indicator} />;
   }
 
-  const tone = marketIndicatorTone(indicator);
-  const positive = indicator.change > 0;
-  const negative = indicator.change < 0;
-  const changePrefix = positive ? "▲" : negative ? "▼" : "━";
+  const positive = indicator.changeRate > 0;
+  const negative = indicator.changeRate < 0;
+  const changePrefix = positive ? "+" : negative ? "-" : "";
+  const sparklineData = buildIndicatorSparklineData(indicator);
 
   return (
     <motion.div
-      className="market-indicator-card relative h-[92px] w-[156px] shrink-0 overflow-hidden rounded-xl"
+      className={cn("market-indicator-card relative h-[88px] overflow-hidden rounded-[14px] border border-[#E5EAF0] bg-white p-3.5 shadow-none", className)}
       data-market-indicator-card
-      whileHover={{ y: -2, backgroundColor: "var(--surface-hover)" }}
+      whileHover={{ y: -2, backgroundColor: "#F8FAFC" }}
       transition={{ duration: 0.18 }}
     >
-      <div className="relative z-10 flex h-full min-w-0 flex-col justify-between p-3">
-        <div className="min-w-0">
-          <p className="truncate text-[12px] font-medium leading-4 text-[var(--text-secondary)]">{compactIndicatorName(indicator.name, indicator.symbol)}</p>
-          <p className="numeric mt-0.5 block max-w-[120px] overflow-hidden text-ellipsis text-[19px] font-bold leading-[19px] text-[var(--text-primary)]">{formatMarketIndicatorValue(indicator)}</p>
-        </div>
-        {indicator.symbol === "FEAR_GREED" ? (
-          <p className={cn("max-w-[72px] truncate text-[12px] font-semibold leading-4", tone.text)}>{fearGreedLabel(indicator.rawStatus)}</p>
-        ) : (
-          <p className={cn("numeric max-w-[72px] overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-semibold leading-4", tone.text)}>
-            {changePrefix} {formatMarketIndicatorChange(indicator)} ({formatPercent(indicator.changeRate)})
-          </p>
-        )}
+      <div className="relative z-10 min-w-0">
+        <p className="truncate text-[12px] font-bold uppercase leading-4 text-[#64748B]">{compactIndicatorName(indicator.name, indicator.symbol)}</p>
+        <p className="numeric mt-1 block max-w-[118px] overflow-hidden text-ellipsis text-[18px] font-black leading-[21px] text-[#0F172A]">{formatMarketIndicatorValue(indicator)}</p>
+        <p className={cn("numeric mt-1 max-w-[72px] overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-black leading-4", positive ? "text-[#EF4444]" : negative ? "text-[#2563EB]" : "text-[#64748B]")}>
+          {changePrefix}{Math.abs(indicator.changeRate).toFixed(2)}%
+        </p>
       </div>
-      <div
-        className={cn(
-          "pointer-events-none absolute bottom-3 right-3 h-[28px] w-[58px] overflow-hidden",
-          positive ? "text-[#22C55E]" : negative ? "text-[#3B82F6]" : "text-[#94A3B8]"
-        )}
-        data-market-sparkline
-      >
-        <MiniSparkline changeRate={indicator.changeRate} />
+      <div className="pointer-events-none absolute bottom-3 right-3 h-[30px] w-[70px] overflow-hidden" data-market-sparkline>
+        <Sparkline data={sparklineData} positive={indicator.changeRate >= 0} />
       </div>
     </motion.div>
   );
@@ -1255,24 +1192,33 @@ function FearGreedDetailCard({ indicator }: { indicator: MarketIndicatorsResult[
   );
 }
 
-function MiniSparkline({ className, changeRate }: { className?: string; changeRate: number }) {
-  const direction = changeRate > 0 ? 1 : changeRate < 0 ? -1 : 0;
-  const magnitude = Math.min(1, Math.abs(changeRate) / 5);
-  const sparklineData = Array.from({ length: 10 }).map((_, index) => {
-    const t = index / 9;
-    const trend = direction * (t - 0.5) * (12 + magnitude * 8);
-    const wave = Math.sin(t * Math.PI * 2) * (direction === 0 ? 0.6 : 1.4);
-    return { value: 50 + trend + wave };
+type SparklineProps = {
+  data: number[];
+  positive?: boolean;
+  width?: number;
+  height?: number;
+};
+
+function Sparkline({ data, positive = true, width = 70, height = 30 }: SparklineProps) {
+  if (!data || data.length < 2) {
+    return <div className="h-[30px] w-[70px]" />;
+  }
+
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const padding = 3;
+  const points = data.map((value, index) => {
+    const x = (index / (data.length - 1)) * width;
+    const y = height - padding - ((value - min) / range) * (height - padding * 2);
+    return `${x},${y}`;
   });
+  const color = positive ? "#EF4444" : "#2563EB";
 
   return (
-    <div className={cn("h-[28px] w-[58px] overflow-hidden", className)}>
-      <ResponsiveContainer width="100%" height="100%">
-        <RechartsLineChart data={sparklineData} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-          <RechartsLine type="monotone" dataKey="value" stroke="currentColor" strokeWidth={2} dot={false} isAnimationActive={false} />
-        </RechartsLineChart>
-      </ResponsiveContainer>
-    </div>
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible" aria-hidden="true">
+      <polyline points={points.join(" ")} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -1314,17 +1260,17 @@ function MovementCell({ label, value, strong = false }: { label: string; value: 
 
 function AllocationCard({ title, data, center }: { title: string; data: PortfolioSummary["assetAllocation"]; center: string }) {
   return (
-    <Card className="min-h-[314px] overflow-hidden">
+    <Card className="min-h-[360px] overflow-hidden rounded-[20px] border-[#E5EAF0] bg-white shadow-sm">
       <CardHeader>
         <div>
-          <CardTitle>{title}</CardTitle>
+          <CardTitle className="text-[18px] font-black text-[#0F172A]">{title}</CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="grid min-w-0 gap-3 md:grid-cols-[190px_minmax(0,1fr)] md:items-center">
+      <CardContent className="grid min-w-0 gap-4 pt-2 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
         <div className="relative h-[210px] min-w-0 overflow-hidden">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={data} innerRadius={56} outerRadius={94} dataKey="value" paddingAngle={2} animationDuration={900}>
+              <Pie data={data} innerRadius={54} outerRadius={88} dataKey="value" paddingAngle={2} animationDuration={900}>
                 {data.map((entry) => (
                   <Cell key={entry.name} fill={entry.color} />
                 ))}
@@ -1333,29 +1279,31 @@ function AllocationCard({ title, data, center }: { title: string; data: Portfoli
             </PieChart>
           </ResponsiveContainer>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-            <p className="text-[12px] font-normal text-[var(--text-secondary)]">총 자산</p>
-            <p className="numeric mt-1 max-w-[132px] overflow-hidden text-ellipsis text-[13px] font-semibold text-[var(--text-primary)]">{center}</p>
+            <p className="text-[12px] font-bold text-[#64748B]">총 자산</p>
+            <p className="numeric mt-1 max-w-[132px] overflow-hidden text-ellipsis text-[13px] font-black text-[#0F172A]">{center}</p>
           </div>
         </div>
         <div className="min-w-0 space-y-3">
           {data.map((item) => (
             <div key={item.name} className="min-w-0 overflow-hidden">
               <div className="flex min-w-0 items-start justify-between gap-3">
-                <span className="flex min-w-0 items-center gap-2 text-[13px] font-normal text-[var(--text-secondary)]">
+                <span className="flex min-w-0 items-center gap-2 text-[13px] font-bold text-[#64748B]">
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
                   <span className="truncate">{item.name}</span>
                 </span>
-                <span className="numeric shrink-0 text-right text-[14px] font-semibold text-[var(--text-primary)]">
+                <span className="numeric shrink-0 text-right text-[16px] font-black text-[#0F172A]">
                   {(item.rate ?? 0).toFixed(1)}%
-                  <span className="block max-w-[112px] overflow-hidden text-ellipsis text-[11px] font-normal text-[var(--text-secondary)]">{formatKrw(item.value)}</span>
                 </span>
               </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface-subtle)]">
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#EEF2F7]">
                 <div className="h-full rounded-full" style={{ width: `${Math.min(100, item.rate ?? 0)}%`, backgroundColor: item.color }} />
               </div>
             </div>
           ))}
         </div>
+        <Button className="h-10 rounded-xl text-[13px] font-bold md:col-span-2" variant="outline" onClick={() => alert("자산 구성 상세 화면에서 확인할 수 있습니다.")}>
+          자산 구성 자세히 보기
+        </Button>
       </CardContent>
     </Card>
   );
@@ -1365,20 +1313,20 @@ function AccountValueCards({ data }: { data: PortfolioSummary["accountValues"] }
   const total = data.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <Card className="min-h-[314px]">
+    <Card className="min-h-[360px] rounded-[20px] border-[#E5EAF0] bg-white shadow-sm">
       <CardHeader>
         <div>
-          <CardTitle>계좌별 평가금액</CardTitle>
+          <CardTitle className="text-[18px] font-black text-[#0F172A]">계좌별 평가금액</CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="min-w-0 space-y-3">
+      <CardContent className="min-w-0 space-y-4 pt-2">
         {data.map((item, index) => {
           const rate = total > 0 ? (item.value / total) * 100 : item.rate ?? 0;
           const displayName = cleanDisplayName(item.name);
           return (
             <motion.div
               key={item.name}
-              className="min-w-0 overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--surface)] p-3 transition hover:bg-[var(--surface-hover)]"
+              className="min-w-0 overflow-hidden rounded-xl bg-white p-2 transition hover:bg-[#F8FAFC]"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05, duration: 0.25 }}
@@ -1386,19 +1334,19 @@ function AccountValueCards({ data }: { data: PortfolioSummary["accountValues"] }
             >
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-[0_8px_20px_rgba(0,0,0,0.20)]" style={{ backgroundColor: item.color }}>
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-[0_10px_22px_rgba(15,23,42,0.13)]" style={{ backgroundColor: item.color }}>
                     <Wallet className="h-5 w-5" />
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{displayName}</p>
+                    <p className="truncate text-[13px] font-black text-[#0F172A]">{displayName}</p>
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="numeric max-w-[136px] overflow-hidden text-ellipsis text-[16px] font-semibold text-[var(--text-primary)]">{formatKrw(item.value)}</p>
-                  <p className="numeric mt-1 text-[11px] font-normal text-[var(--text-secondary)]">{rate.toFixed(1)}%</p>
+                  <p className="numeric max-w-[150px] overflow-hidden text-ellipsis text-[16px] font-black text-[#0F172A]">{formatKrw(item.value)}</p>
+                  <p className="numeric mt-1 text-[11px] font-bold text-[#64748B]">{rate.toFixed(1)}%</p>
                 </div>
               </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--surface-subtle)]">
+              <div className="ml-12 mt-3 h-1.5 overflow-hidden rounded-full bg-[#EEF2F7]">
                 <motion.div
                   className="h-full rounded-full"
                   style={{ backgroundColor: item.color }}
@@ -1410,6 +1358,9 @@ function AccountValueCards({ data }: { data: PortfolioSummary["accountValues"] }
             </motion.div>
           );
         })}
+        <Button className="mt-2 h-10 w-full rounded-xl text-[13px] font-bold" variant="outline" onClick={() => alert("계좌 관리 화면으로 이동합니다.")}>
+          계좌 관리
+        </Button>
       </CardContent>
     </Card>
   );
@@ -2040,26 +1991,28 @@ function TossHoldingEmpty() {
   );
 }
 
-function TopHoldings({ data }: { data: PortfolioSummary }) {
+function TopHoldings({ data, onNavigate }: { data: PortfolioSummary; onNavigate?: (view: ViewKey) => void }) {
   const totalMarketValue = Math.max(1, data.metrics.totalMarketValue);
+  const firstAccount = buildAccountNavigation(data)[0]?.key;
 
   return (
-    <Card className="min-h-[326px]">
+    <Card className="min-h-[360px] rounded-[20px] border-[#E5EAF0] bg-white shadow-sm">
       <CardHeader className="block">
         <div className="flex min-w-0 w-full items-start justify-between gap-3">
-          <CardTitle className="min-w-0 truncate text-[19px]">상위 보유 종목 TOP 5</CardTitle>
-          <div className="flex shrink-0 rounded-lg bg-[var(--surface-subtle)] p-1 text-[11px] text-[var(--text-secondary)]">
-            <button className="rounded-md bg-white px-2.5 py-1 text-[var(--text-primary)] shadow-sm dark:bg-white/[0.10] dark:text-white" onClick={() => alert("전체 보유종목 필터를 선택했습니다.")}>전체</button>
-            <button className="px-2.5 py-1 transition hover:text-[var(--text-primary)]" onClick={() => alert("국내 주식 필터는 보유종목 상세 화면에서 확장됩니다.")}>국내 주식</button>
-            <button className="px-2.5 py-1 transition hover:text-[var(--text-primary)]" onClick={() => alert("해외 주식 필터는 보유종목 상세 화면에서 확장됩니다.")}>해외 주식</button>
-          </div>
+          <CardTitle className="min-w-0 truncate text-[18px] font-black text-[#0F172A]">상위 보유 종목 TOP 5</CardTitle>
+          <button
+            className="shrink-0 rounded-lg border border-[#E5EAF0] bg-white px-3 py-1.5 text-[12px] font-bold text-[#64748B] shadow-sm transition hover:bg-[#F8FAFC] hover:text-[#0F172A]"
+            onClick={() => (firstAccount && onNavigate ? onNavigate(firstAccount) : alert("전체 보유종목은 계좌별 상세 화면에서 확인할 수 있습니다."))}
+          >
+            전체 보기
+          </button>
         </div>
       </CardHeader>
       <CardContent className="pt-1">
         <div className="space-y-1">
           {data.topHoldings.map((holding, index) => (
-            <div key={holding.id} className="grid h-11 min-w-0 grid-cols-[22px_32px_minmax(0,1fr)_50px_118px] items-center gap-3 overflow-hidden rounded-lg px-1 text-[13px] transition hover:bg-[var(--surface-hover)]">
-              <p className="text-center text-[12px] font-normal text-[var(--text-muted)]">{index + 1}</p>
+            <div key={holding.id} className="grid h-[44px] min-w-0 grid-cols-[22px_34px_minmax(0,1fr)_48px_118px] items-center gap-3 overflow-hidden rounded-xl px-1 text-[13px] transition hover:bg-[#F8FAFC]">
+              <p className="text-center text-[13px] font-bold text-[#64748B]">{index + 1}</p>
               <SecurityLogo
                 symbol={holding.symbol}
                 name={holding.name}
@@ -2069,23 +2022,19 @@ function TopHoldings({ data }: { data: PortfolioSummary }) {
                 showCountryBadge
               />
               <div className="min-w-0">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <p className="truncate font-semibold text-[var(--text-primary)]">{holding.symbol}</p>
-                  <LossStickerBadge profitLossRate={holding.profitLossRate} mode={lossStickerMode} />
-                  <ProfitStickerBadge profitLossRate={holding.profitLossRate} mode={profitStickerMode} />
-                </div>
-                <p className="truncate text-[10px] font-normal text-[var(--text-secondary)]">{holding.name}</p>
+                <p className="truncate font-black text-[#0F172A]">{holding.symbol}</p>
+                <p className="truncate text-[11px] font-medium text-[#64748B]">{holding.name}</p>
               </div>
-              <p className="numeric overflow-hidden text-ellipsis text-right text-[12px] font-normal text-[var(--text-secondary)]">{((safeNumber(holding.marketValue) / totalMarketValue) * 100).toFixed(2)}%</p>
+              <p className="numeric overflow-hidden text-ellipsis text-right text-[12px] font-bold text-[#64748B]">{((safeNumber(holding.marketValue) / totalMarketValue) * 100).toFixed(2)}%</p>
               <div className="min-w-0 text-right">
-                <p className="numeric overflow-hidden text-ellipsis font-semibold text-[var(--text-primary)]">{formatKrw(holding.marketValue)}</p>
-                <p className={cn("numeric mt-0.5 overflow-hidden text-ellipsis text-[11px] font-semibold", holding.profitLossRate >= 0 ? "text-[#EF4444]" : "text-[#3B82F6]")}>{formatPercent(holding.profitLossRate)}</p>
+                <p className="numeric overflow-hidden text-ellipsis font-black text-[#0F172A]">{formatKrw(holding.marketValue)}</p>
+                <p className={cn("numeric mt-0.5 overflow-hidden text-ellipsis text-[11px] font-black", holding.profitLossRate >= 0 ? "text-[#EF4444]" : "text-[#2563EB]")}>{formatPercent(holding.profitLossRate)}</p>
               </div>
             </div>
           ))}
         </div>
-        <Button className="mt-4 h-10 w-full rounded-xl text-[13px] font-medium" variant="dark" onClick={() => alert("전체 종목 리스트는 계좌별 상세 화면에서 확인할 수 있습니다.")}>
-          전체 종목 보기 <ChevronRight className="h-4 w-4" />
+        <Button className="mt-4 h-10 w-full rounded-xl text-[13px] font-bold" variant="outline" onClick={() => (firstAccount && onNavigate ? onNavigate(firstAccount) : alert("전체 종목 리스트는 계좌별 상세 화면에서 확인할 수 있습니다."))}>
+          보유 종목 전체 보기
         </Button>
       </CardContent>
     </Card>
@@ -4280,7 +4229,7 @@ function brokerAccentClass(broker: BrokerKey) {
 }
 
 function sortMarketIndicators(indicators: MarketIndicatorsResult["indicators"]) {
-  const order = ["USD_KRW", "FEAR_GREED", "WTI", "SPX", "NASDAQ100", "NDX", "VIX", "BTC"];
+  const order = ["KOSPI", "KOSDAQ", "SPX", "NASDAQ100", "NDX", "WTI", "USD_KRW", "FEAR_GREED", "VIX", "BTC"];
   const seen = new Set<string>();
 
   return [...indicators]
@@ -4295,19 +4244,53 @@ function sortMarketIndicators(indicators: MarketIndicatorsResult["indicators"]) 
     .slice(0, 7);
 }
 
+function selectDashboardMarketIndicators(indicators: MarketIndicatorsResult["indicators"]) {
+  const order = ["KOSPI", "KOSDAQ", "SPX", "NASDAQ100", "NDX", "WTI", "USD_KRW"];
+  const seen = new Set<string>();
+
+  return [...indicators]
+    .filter((indicator) => order.includes(indicator.symbol))
+    .sort((a, b) => order.indexOf(a.symbol) - order.indexOf(b.symbol))
+    .filter((indicator) => {
+      const group = indicator.symbol === "NASDAQ100" || indicator.symbol === "NDX" ? "NASDAQ" : indicator.symbol;
+      if (seen.has(group)) return false;
+      seen.add(group);
+      return true;
+    })
+    .slice(0, 6);
+}
+
 function findFearGreedIndicator(data?: MarketIndicatorsResult) {
   return data?.indicators.find((indicator) => indicator.symbol === "FEAR_GREED") ?? null;
 }
 
-function buildHeroChartData(_totalValue: number, todayChange: number) {
+function buildHeroChartData(totalValue: number, todayChange: number) {
+  const base = Math.max(1, safeNumber(totalValue));
   const safeChange = safeNumber(todayChange);
-  const changeTone = safeChange >= 0 ? 1 : -1;
-  const pattern = [42, 41, 40, 39, 33, 29, 34, 38, 36, 31, 35, 43, 51, 57, 61, 66, 73, 76, 82, 79, 87, 84, 90, 92];
+  const start = Math.max(1, base - safeChange - base * 0.018);
+  const pattern = [0, -0.018, -0.011, 0.009, -0.004, 0.014, 0.01, 0.032, 0.027, 0.041, 0.036, 0.058, 0.055, 0.073, 0.084, 0.079, 0.097, 0.104, 0.119, 0.126, 0.141, 0.137, 0.153, 0.151];
 
   return pattern.map((point, index) => ({
     name: index.toString(),
-    value: point + index * changeTone * 0.45
+    value: start + (base - start) * (index / (pattern.length - 1)) + base * 0.035 * point
   }));
+}
+
+function buildIndicatorSparklineData(indicator: MarketIndicatorsResult["indicators"][number]) {
+  const current = safeNumber(indicator.value);
+  const change = safeNumber(indicator.change);
+  if (!Number.isFinite(current) || current <= 0 || Math.abs(change) < 0.000001) return [];
+
+  const previous = current - change;
+  const amplitude = Math.max(Math.abs(change) * 0.32, Math.abs(current) * 0.0008);
+  const direction = change >= 0 ? 1 : -1;
+
+  return Array.from({ length: 10 }).map((_, index) => {
+    const t = index / 9;
+    const trend = previous + change * t;
+    const curve = Math.sin(t * Math.PI * 2.4) * amplitude * (1 - Math.abs(t - 0.5) * 0.7);
+    return trend + curve * direction;
+  });
 }
 
 function buildAggregatedHoldings(data: PortfolioSummary, searchText: string, sortKey: HoldingSortKey): AggregatedHolding[] {
@@ -4545,10 +4528,14 @@ function formatMarketIndicatorValue(indicator: MarketIndicatorsResult["indicator
 
 function compactIndicatorName(name: string, symbol: string) {
   const names: Record<string, string> = {
-    USD_KRW: "USD/KRW",
+    KOSPI: "KOSPI",
+    KOSDAQ: "KOSDAQ",
+    USD_KRW: "달러/원",
     FEAR_GREED: "공포탐욕",
     US10Y: "미국 10년물",
+    SPX: "S&P 500",
     NASDAQ100: "Nasdaq 100",
+    NDX: "Nasdaq 100",
     BTC: "비트코인"
   };
   return names[symbol] ?? name.replace("원/달러 환율", "USD/KRW").replace("국제유가 ", "");
@@ -4559,29 +4546,6 @@ function formatMarketIndicatorChange(indicator: MarketIndicatorsResult["indicato
   if (indicator.unit === "USD") return `$${indicator.change.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
   if (indicator.unit === "PERCENT") return `${indicator.change.toFixed(2)}%p`;
   return indicator.change.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
-}
-
-function marketIndicatorTone(indicator: MarketIndicatorsResult["indicators"][number]) {
-  if (indicator.isDelayed || indicator.status === "DELAYED") {
-    return { label: "지연", badge: "bg-orange-400/15 text-orange-200", text: "text-orange-300" };
-  }
-  if (indicator.rawStatus.includes("GREED")) {
-    return { label: fearGreedLabel(indicator.rawStatus), badge: "bg-emerald-400/15 text-emerald-200", text: "text-emerald-300" };
-  }
-  if (indicator.rawStatus.includes("FEAR")) {
-    return { label: fearGreedLabel(indicator.rawStatus), badge: "bg-blue-400/15 text-blue-200", text: "text-blue-300" };
-  }
-  if (indicator.change > 0) {
-    return { label: "상승", badge: "bg-red-400/15 text-red-200", text: "text-red-300" };
-  }
-  if (indicator.change < 0) {
-    return { label: "하락", badge: "bg-blue-400/15 text-blue-200", text: "text-blue-300" };
-  }
-  return { label: "중립", badge: "bg-white/10 text-slate-300", text: "text-slate-400" };
-}
-
-function fearGreedLabel(status: string) {
-  return FEAR_GREED_META[status as FearGreedLevel]?.labelKo ?? status;
 }
 
 function formatSignedKrw(value: number) {

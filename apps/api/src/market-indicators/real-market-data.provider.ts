@@ -112,6 +112,8 @@ export class RealMarketDataProvider implements MarketDataProvider {
 
   async getMarketIndexes() {
     return [
+      await this.yahooIndicator("^KS11", "KOSPI", "KOSPI", "INDEX", "KRW", "POINT", 60_000),
+      await this.yahooIndicator("^KQ11", "KOSDAQ", "KOSDAQ", "INDEX", "KRW", "POINT", 60_000),
       await this.yahooIndicator("^GSPC", "SPX", "S&P 500", "INDEX", "USD", "POINT", 60_000),
       await this.yahooIndicator("^NDX", "NDX", "Nasdaq 100", "INDEX", "USD", "POINT", 60_000),
       await this.yahooIndicator("^VIX", "VIX", "VIX", "VOLATILITY", "USD", "POINT", 60_000)

@@ -100,6 +100,30 @@ export class MockMarketDataProvider implements MarketDataProvider {
   async getMarketIndexes() {
     return [
       indicator({
+        symbol: "KOSPI",
+        name: "KOSPI",
+        category: "INDEX",
+        value: 2678.19,
+        change: 29.67,
+        changeRate: 1.12,
+        currency: "KRW",
+        unit: "POINT",
+        marketState: "REGULAR",
+        refreshIntervalMs: 60_000
+      }),
+      indicator({
+        symbol: "KOSDAQ",
+        name: "KOSDAQ",
+        category: "INDEX",
+        value: 842.51,
+        change: 5.68,
+        changeRate: 0.68,
+        currency: "KRW",
+        unit: "POINT",
+        marketState: "REGULAR",
+        refreshIntervalMs: 60_000
+      }),
+      indicator({
         symbol: "SPX",
         name: "S&P 500",
         category: "INDEX",

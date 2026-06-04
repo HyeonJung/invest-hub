@@ -5,6 +5,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CachedMarketDataService } from "./cached-market-data.service";
 
 const FALLBACK_USD_KRW_RATE = Number(process.env.USD_KRW_RATE ?? 1516.5);
+const REQUIRED_MARKET_INDICATOR_SYMBOLS = ["KOSPI", "KOSDAQ", "SPX", "NDX", "WTI", "USD_KRW"];
 
 @Injectable()
 export class MarketIndicatorsService {
@@ -22,7 +23,7 @@ export class MarketIndicatorsService {
 
     const errors = await this.refreshUsdKrwFromToss(userId);
     const rows = await this.prisma.marketIndicator.findMany({ orderBy: { symbol: "asc" } });
-    const needsRefresh = rows.some((row) => row.symbol !== "USD_KRW" && row.expiresAt.getTime() <= Date.now());
+    const needsRefresh = rows.some((row) => row.symbol !== "USD_KRW" && row.expiresAt.getTime() <= Date.now()) || hasMissingRequiredIndicators(rows);
     if (needsRefresh) {
       return this.refreshIndicators(false, userId);
     }
@@ -36,7 +37,7 @@ export class MarketIndicatorsService {
     const existingBySymbol = new Map(existingRows.map((row) => [row.symbol, row]));
     const expiredRows = existingRows.filter((row) => row.expiresAt.getTime() <= now.getTime());
 
-    if (!force && existingRows.length > 0 && expiredRows.length === 0) {
+    if (!force && existingRows.length > 0 && expiredRows.length === 0 && !hasMissingRequiredIndicators(existingRows)) {
       const errors = await this.refreshUsdKrwFromToss(userId, now, force);
       const rows = await this.prisma.marketIndicator.findMany({ orderBy: { symbol: "asc" } });
       return this.toResponse(rows, errors);
@@ -270,6 +271,11 @@ export class MarketIndicatorsService {
       return ["토스증권 환율 조회에 실패해 마지막 성공 환율을 유지했습니다."];
     }
   }
+}
+
+function hasMissingRequiredIndicators(rows: MarketIndicator[]) {
+  const symbols = new Set(rows.map((row) => row.symbol));
+  return REQUIRED_MARKET_INDICATOR_SYMBOLS.some((symbol) => !symbols.has(symbol));
 }
 
 function nextRefreshInterval(rows: MarketIndicator[]) {

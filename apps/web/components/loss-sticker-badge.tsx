@@ -77,7 +77,7 @@ export function LossStickerBadge({
             src={LOSS_STICKER_IMAGE_SRC}
             alt=""
             loading="lazy"
-            className={cn("shrink-0 object-contain transition-transform hover:scale-110", itemSizeClass, mobileVisibility)}
+            className={cn("shrink-0 rounded-full object-cover transition-transform hover:scale-110", itemSizeClass, mobileVisibility)}
           />
         );
       })}
@@ -129,7 +129,7 @@ export function ProfitStickerBadge({
             src={PROFIT_BURGER_IMAGE_SRC}
             alt=""
             loading="lazy"
-            className={cn("shrink-0 object-contain transition-transform hover:scale-110", stickerSizeClass)}
+            className={cn("shrink-0 rounded-full object-cover transition-transform hover:scale-110", stickerSizeClass)}
           />
         );
       })}

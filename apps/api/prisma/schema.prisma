@@ -41,6 +41,14 @@ enum SourceType {
   MANUAL
 }
 
+enum LogoSource {
+  MANUAL
+  FINNHUB
+  LOGO_DEV
+  BRANDFETCH
+  FALLBACK
+}
+
 model User {
   id          String   @id @default(uuid())
   email       String   @unique
@@ -120,14 +128,19 @@ model AccountApiCredential {
 }
 
 model Security {
-  id            String  @id @default(uuid())
-  symbol        String
-  isinCode      String?
-  name          String
-  marketCountry String
-  currency      String
-  assetType     String
-  riskType      String?
+  id                  String      @id @default(uuid())
+  symbol              String
+  isinCode            String?
+  name                String
+  marketCountry       String
+  currency            String
+  assetType           String
+  riskType            String?
+  logoUrl             String?     @map("logo_url")
+  companyDomain       String?     @map("company_domain")
+  logoSource          LogoSource? @map("logo_source")
+  logoLastCheckedAt   DateTime?   @map("logo_last_checked_at")
+  logoFailedAt        DateTime?   @map("logo_failed_at")
 
   holdings Holding[]
 

@@ -36,9 +36,9 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(37,99,235,0.35),transparent_35rem),radial-gradient(circle_at_80%_10%,rgba(69,196,159,0.18),transparent_30rem)]" />
-      <section className="relative grid w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl md:grid-cols-[1.05fr_0.95fr]">
+    <main className="flex min-h-screen items-center justify-center bg-[var(--background)] p-6">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(37,99,235,0.16),transparent_35rem),radial-gradient(circle_at_80%_10%,rgba(69,196,159,0.12),transparent_30rem)]" />
+      <section className="relative grid w-full max-w-5xl overflow-hidden rounded-2xl border border-[var(--card-border)] bg-white shadow-2xl md:grid-cols-[1.05fr_0.95fr]">
         <div className="dark-panel p-10 text-white">
           <div className="flex items-center gap-3">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500">

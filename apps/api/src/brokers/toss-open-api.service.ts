@@ -146,7 +146,8 @@ export class TossOpenApiService {
     });
 
     if (!response.ok) {
-      throw new BadRequestException("토스증권 토큰 발급에 실패했습니다. API 정보를 확인하세요.");
+      const tossError = await readTossError(response);
+      throw new BadRequestException(`토스증권 토큰 발급에 실패했습니다. ${tossError}`);
     }
 
     const json = (await response.json()) as { access_token?: string };
@@ -176,7 +177,8 @@ export class TossOpenApiService {
 
     const response = await fetch(`${TOSS_BASE_URL}${path}`, { headers });
     if (!response.ok) {
-      throw new BadRequestException(`토스증권 API 호출에 실패했습니다: ${path}`);
+      const tossError = await readTossError(response);
+      throw new BadRequestException(`토스증권 API 호출에 실패했습니다: ${path}. ${tossError}`);
     }
     return response.json() as Promise<any>;
   }
@@ -387,4 +389,39 @@ function inferAssetType(symbol: string, name: string) {
     return "ETF";
   }
   return "STOCK";
+}
+
+async function readTossError(response: Response) {
+  const statusPrefix = `HTTP ${response.status}`;
+  const body = await response.text().catch(() => "");
+  if (!body) return `${statusPrefix} 응답입니다.`;
+
+  try {
+    const json = JSON.parse(body);
+    const code = readNestedString(json, ["error", "code"]) ?? readNestedString(json, ["error"]);
+    const message =
+      readNestedString(json, ["error", "message"]) ??
+      readNestedString(json, ["error_description"]) ??
+      readNestedString(json, ["message"]);
+    const normalized = normalizeTossErrorMessage(code, message);
+    return [statusPrefix, code, normalized].filter(Boolean).join(" / ");
+  } catch {
+    return `${statusPrefix} 응답입니다.`;
+  }
+}
+
+function readNestedString(value: any, path: string[]) {
+  const result = path.reduce((current, key) => (current && typeof current === "object" ? current[key] : undefined), value);
+  return typeof result === "string" && result.trim() ? result.trim() : null;
+}
+
+function normalizeTossErrorMessage(code?: string | null, message?: string | null) {
+  const text = [code, message].filter(Boolean).join(" ").toLowerCase();
+  if (text.includes("ip address not allowed")) {
+    return "현재 서버 IP가 토스증권 Open API 허용 IP에 등록되어 있지 않습니다.";
+  }
+  if (text.includes("invalid") && (text.includes("client") || text.includes("secret"))) {
+    return "client_id 또는 client_secret을 확인하세요.";
+  }
+  return message ?? "API 정보를 확인하세요.";
 }

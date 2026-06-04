@@ -6,6 +6,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        background: "var(--background)",
+        surface: "var(--surface)",
+        "surface-subtle": "var(--surface-subtle)",
+        "surface-hover": "var(--surface-hover)",
+        primary: "var(--primary)",
+        success: "var(--success)",
+        danger: "var(--danger)",
+        warning: "var(--warning)",
+        text: {
+          primary: "var(--text-primary)",
+          secondary: "var(--text-secondary)",
+          muted: "var(--text-muted)"
+        },
         navy: {
           950: "#071226",
           900: "#0a1730",

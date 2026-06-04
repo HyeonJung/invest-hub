@@ -20,7 +20,7 @@ import {
   Globe2,
   Info,
   Landmark,
-  LineChart,
+  LineChart as LineChartIcon,
   Loader2,
   LogOut,
   PieChart as PieIcon,
@@ -41,6 +41,8 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Line as RechartsLine,
+  LineChart as RechartsLineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -71,6 +73,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { Input } from "@/components/ui/input";
+import { SecurityLogo } from "@/components/security-logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useMarketIndicators } from "@/hooks/use-market-indicators";
 
 type StaticViewKey = "overview" | "upload" | "settings" | "ai" | "rebalance" | "dividend" | "tax" | "market" | "alerts";
@@ -221,8 +225,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#07111F] text-slate-100">
-      <aside className="fixed left-0 top-0 z-20 hidden h-screen w-[240px] border-r border-white/[0.05] bg-[#04101F] text-white shadow-[8px_0_30px_rgba(0,0,0,0.10)] lg:block">
+    <div className="dashboard-shell flex h-screen w-screen overflow-hidden" data-dashboard-shell>
+      <aside className="dashboard-sidebar hidden h-screen w-[240px] shrink-0 border-r lg:block" data-sidebar>
         <Sidebar
           active={view}
           accounts={accountNavigation}
@@ -231,7 +235,7 @@ export default function DashboardPage() {
           onLogout={() => logout(router, notify)}
         />
       </aside>
-      <main className="min-h-screen px-4 py-6 lg:ml-[240px] lg:px-8">
+      <main className="dashboard-main min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 lg:px-6 2xl:px-8" data-main-content>
         <Header
           view={view}
           onChange={navigate}
@@ -275,6 +279,13 @@ export default function DashboardPage() {
         ) : null}
         {view === "alerts" ? <AlertCenterPanel summary={summaryQuery.data} onNavigate={navigate} /> : null}
       </main>
+      <aside className="dashboard-right-panel hidden h-screen w-[300px] shrink-0 overflow-y-auto overflow-x-hidden border-l px-4 py-6 min-[1400px]:block min-[1536px]:w-[320px]" data-right-panel>
+        {summaryQuery.data ? (
+          <DashboardSidePanel data={summaryQuery.data} onNavigate={navigate} />
+        ) : (
+          <RightPanelPlaceholder loading={summaryQuery.isLoading} />
+        )}
+      </aside>
       <AccountConnectionModal open={connectModalOpen} onClose={() => setConnectModalOpen(false)} onChoose={handleConnectChoice} />
     </div>
   );
@@ -315,7 +326,7 @@ function Sidebar({
   const accountGroups = buildBrokerAccountGroups(accounts);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const secondaryItems: Array<{ key: StaticViewKey; label: string; icon: ElementType }> = [
-    { key: "ai", label: "AI 분석", icon: LineChart },
+    { key: "ai", label: "AI 분석", icon: LineChartIcon },
     { key: "rebalance", label: "리밸런싱 추천", icon: SlidersHorizontal },
     { key: "dividend", label: "배당 캘린더", icon: CalendarDays },
     { key: "tax", label: "세금/절세", icon: CircleDollarSign },
@@ -340,19 +351,17 @@ function Sidebar({
         <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-white/95 shadow-[0_0_24px_rgba(59,130,246,0.28)]">
           <img src="/favicon.svg" alt="Invest Hub" className="h-8 w-8" />
         </span>
-        <span className="text-[21px] font-bold tracking-[-0.02em] text-white">INVEST HUB</span>
+        <span className="text-[21px] font-bold text-[var(--text-primary)]">INVEST HUB</span>
       </div>
       <nav className="mt-6 min-h-0 flex-1 space-y-5 overflow-y-auto pr-1 premium-scrollbar">
         <motion.button
           onClick={() => onNavigate("overview")}
           whileHover={{ x: 2 }}
           transition={{ duration: 0.18 }}
-          className={cn(
-            "flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-semibold transition",
-            active === "overview"
-              ? "bg-gradient-to-r from-[#2563EB] to-[#3B82F6] text-white shadow-[0_14px_30px_rgba(37,99,235,0.28)]"
-              : "text-slate-400 hover:bg-white/[0.07] hover:text-white"
-          )}
+            className={cn(
+              "flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-semibold transition",
+              active === "overview" ? "theme-nav-active" : "theme-nav-idle"
+            )}
         >
           <BriefcaseBusiness className="h-4 w-4" />
           종합 대시보드
@@ -360,10 +369,10 @@ function Sidebar({
 
         <section>
           <div className="mb-3 flex items-center justify-between px-2">
-            <p className="text-[13px] font-medium text-[#94A3B8]">내 계좌</p>
+            <p className="text-[13px] font-medium text-[var(--text-muted)]">내 계좌</p>
             <button
               type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.06] text-slate-300 transition hover:bg-[#2563EB] hover:text-white"
+              className="theme-icon-button flex h-8 w-8 items-center justify-center rounded-lg transition"
               onClick={onConnectAccount}
               aria-label="계좌 연결"
               title="계좌 연결"
@@ -372,9 +381,9 @@ function Sidebar({
             </button>
           </div>
           {accountGroups.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-white/12 bg-white/[0.035] p-4">
-              <p className="text-sm font-black text-slate-200">연결된 계좌 없음</p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">API 연결 또는 CSV 업로드를 하면 계좌가 자동으로 생깁니다.</p>
+            <div className="rounded-2xl border border-dashed border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">
+              <p className="text-sm font-black text-[var(--text-primary)]">연결된 계좌 없음</p>
+              <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">API 연결 또는 CSV 업로드를 하면 계좌가 자동으로 생깁니다.</p>
               <Button className="mt-3 w-full" size="sm" variant="dark" onClick={onConnectAccount}>
                 <Plus className="h-4 w-4" />
                 계좌 연결
@@ -389,16 +398,16 @@ function Sidebar({
                   <div key={group.broker} className="space-y-1">
                     <button
                       type="button"
-                      className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left transition hover:bg-white/[0.06]"
+                      className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left transition hover:bg-[var(--surface-hover)]"
                       onClick={() => setOpenGroups((current) => ({ ...current, [group.broker]: !isOpen }))}
                     >
                       <span className={cn("flex h-7 w-7 items-center justify-center rounded-lg text-white shadow-[0_8px_20px_rgba(0,0,0,0.22)]", brokerAccentClass(group.broker))}>
                         <Icon className="h-4 w-4" />
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-200">
-                        {group.label} <span className="text-slate-500">({group.accounts.length})</span>
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--text-primary)]">
+                        {group.label} <span className="text-[var(--text-muted)]">({group.accounts.length})</span>
                       </span>
-                      <ChevronDown className={cn("h-4 w-4 text-slate-500 transition", !isOpen && "-rotate-90")} />
+                      <ChevronDown className={cn("h-4 w-4 text-[var(--text-muted)] transition", !isOpen && "-rotate-90")} />
                     </button>
                     {isOpen ? (
                       <div className="space-y-1 pl-2">
@@ -412,7 +421,7 @@ function Sidebar({
                               transition={{ duration: 0.16 }}
                               className={cn(
                                 "flex h-9 w-full items-center gap-3 rounded-lg px-3 text-left transition",
-                                isActive ? "bg-[#12203A] text-white" : "text-slate-400 hover:bg-white/[0.055] hover:text-slate-100"
+                                isActive ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "theme-nav-idle"
                               )}
                             >
                               <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", account.profitLoss >= 0 ? "bg-red-400" : "bg-blue-400")} />
@@ -429,7 +438,7 @@ function Sidebar({
               })}
             </div>
           )}
-          <Button className="mt-3 h-9 w-full rounded-lg border-white/[0.06] bg-white/[0.06] text-[12px] font-medium" variant="dark" size="sm" onClick={onConnectAccount}>
+          <Button className="mt-3 h-9 w-full rounded-lg text-[12px] font-medium" variant="dark" size="sm" onClick={onConnectAccount}>
             <Plus className="h-4 w-4" />
             계좌 연결하기
           </Button>
@@ -447,7 +456,7 @@ function Sidebar({
                 transition={{ duration: 0.18 }}
                 className={cn(
                   "flex h-9 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium transition",
-                  isActive ? "bg-[#12203A] text-white" : "text-slate-400 hover:bg-white/[0.07] hover:text-white"
+                  isActive ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "theme-nav-idle"
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -458,11 +467,11 @@ function Sidebar({
         </section>
       </nav>
       <div className="mt-5 space-y-2 pb-1">
-        <Button className="h-10 w-full justify-start rounded-lg bg-transparent px-3 text-[13px] font-medium text-slate-300 hover:bg-white/[0.07]" variant="ghost" onClick={() => onNavigate("settings")}>
+        <Button className="h-10 w-full justify-start rounded-lg bg-transparent px-3 text-[13px] font-medium" variant="ghost" onClick={() => onNavigate("settings")}>
           <Settings className="h-4 w-4" />
           설정
         </Button>
-        <Button className="h-10 w-full justify-start rounded-lg bg-transparent px-3 text-[13px] font-medium text-slate-300 hover:bg-white/[0.07]" variant="ghost" onClick={onLogout}>
+        <Button className="h-10 w-full justify-start rounded-lg bg-transparent px-3 text-[13px] font-medium" variant="ghost" onClick={onLogout}>
           <LogOut className="h-4 w-4" />
           로그아웃
         </Button>
@@ -487,20 +496,21 @@ function Header({
   const title = view === "overview" ? "종합 대시보드" : navLabel(view);
 
   return (
-    <header className="mb-5">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <h1 className="text-[28px] font-bold leading-none tracking-[-0.02em] text-white">{title}</h1>
-          <p className="mt-2 text-[13px] font-normal text-[#94A3B8]">모든 계좌의 자산 현황을 한눈에 확인하세요</p>
+    <header className="mb-5 min-w-0 overflow-hidden">
+      <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-[28px] font-bold leading-none text-[var(--text-primary)]">{title}</h1>
+          <p className="mt-2 text-[13px] font-normal text-[var(--text-secondary)]">모든 계좌의 자산 현황을 한눈에 확인하세요</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex h-10 items-center gap-2 rounded-xl border border-white/[0.05] bg-[#0D1729] px-4 text-xs font-medium text-slate-300">
+        <div className="flex shrink-0 flex-wrap items-center gap-3">
+          <ThemeToggle />
+          <div className="theme-pill flex h-10 items-center gap-2 rounded-xl px-4 text-xs font-medium">
             <span className={cn("h-2 w-2 rounded-full", priceRefreshing ? "animate-pulse bg-emerald-400" : "bg-emerald-500")} />
             자동 갱신 중
-            <span className="ml-3 text-slate-500">{formatHeaderTime(lastSuccessAt)}</span>
+            <span className="numeric ml-3 text-[var(--text-muted)]">{formatHeaderTime(lastSuccessAt)}</span>
           </div>
           <button
-            className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.05] bg-[#0D1729] text-slate-200 transition hover:bg-[#12203A]"
+            className="theme-icon-button relative flex h-10 w-10 items-center justify-center rounded-xl transition"
             onClick={() => onChange("alerts")}
             aria-label="알림"
           >
@@ -509,7 +519,7 @@ function Header({
               3
             </span>
           </button>
-          <Button className="h-10 rounded-xl border-white/[0.05] bg-[#0D1729] px-5 text-[13px] font-semibold" variant="outline" onClick={onRefresh} disabled={priceRefreshing}>
+          <Button className="h-10 rounded-xl px-5 text-[13px] font-semibold" variant="outline" onClick={onRefresh} disabled={priceRefreshing}>
             {priceRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             2024.06.03 (월)
           </Button>
@@ -533,19 +543,19 @@ function PriceRefreshStatus({
 
   return (
     <section className="mb-5 space-y-2" aria-live="polite">
-      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 rounded-2xl border border-[var(--card-border)] bg-[var(--surface)] px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          <span className="flex items-center gap-2 font-black text-slate-100">
+          <span className="flex items-center gap-2 font-black text-[var(--text-primary)]">
             {loading ? <Loader2 className="h-4 w-4 animate-spin text-blue-600" /> : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
             현재가 자동 갱신
           </span>
-          <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", isOpen ? "bg-emerald-500/15 text-emerald-300" : "bg-white/10 text-slate-300")}>
+          <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", isOpen ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300" : "bg-[var(--surface-subtle)] text-[var(--text-secondary)]")}>
             {data?.marketSession.label ?? "상태 확인 중"}
           </span>
-          <span className="text-slate-400">마지막 성공 {formatDateTime(data?.lastSuccessAt)}</span>
-          <span className="text-slate-400">주기 {formatInterval(data?.refreshIntervalMs)}</span>
+          <span className="text-[var(--text-secondary)]">마지막 성공 {formatDateTime(data?.lastSuccessAt)}</span>
+          <span className="text-[var(--text-secondary)]">주기 {formatInterval(data?.refreshIntervalMs)}</span>
         </div>
-        <div className="text-xs font-semibold text-slate-500">
+        <div className="text-xs font-semibold text-[var(--text-muted)]">
           조회 {data?.symbolsRequested ?? 0}개 · 반영 {data?.holdingsUpdated ?? 0}건 · {data?.source ?? "가격 소스 준비 중"}
         </div>
       </div>
@@ -592,24 +602,24 @@ function AccountConnectionModal({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
       <motion.section
-        className="w-full max-w-3xl overflow-hidden rounded-[28px] border border-white/10 bg-[#101a2c] shadow-[0_30px_100px_rgba(0,0,0,0.55)]"
+        className="w-full max-w-3xl overflow-hidden rounded-[28px] border border-[var(--card-border)] bg-[var(--surface)] shadow-[0_30px_100px_rgba(15,23,42,0.22)]"
         initial={{ opacity: 0, scale: 0.96, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.22 }}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-white/10 p-6">
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--card-border)] p-6">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-300/80">Account Connection</p>
-            <h2 className="mt-2 text-2xl font-black text-white">계좌 연결</h2>
-            <p className="mt-2 text-sm font-semibold text-slate-400">
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-500">Account Connection</p>
+            <h2 className="mt-2 text-2xl font-black text-[var(--text-primary)]">계좌 연결</h2>
+            <p className="mt-2 text-sm font-semibold text-[var(--text-secondary)]">
               API 연결, 계좌 조회, 계좌 선택, 최초 동기화 흐름으로 내 계좌 트리에 자동 추가됩니다.
             </p>
           </div>
           <button
             type="button"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-slate-300 transition hover:bg-white/[0.10] hover:text-white"
+            className="theme-icon-button flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition"
             onClick={onClose}
             aria-label="계좌 연결 닫기"
           >
@@ -623,23 +633,23 @@ function AccountConnectionModal({
               <button
                 key={choice.label}
                 type="button"
-                className="group rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left transition hover:-translate-y-0.5 hover:border-blue-400/50 hover:bg-white/[0.075]"
+                className="group rounded-2xl border border-[var(--card-border)] bg-[var(--surface)] p-4 text-left transition hover:-translate-y-0.5 hover:border-blue-300 hover:bg-[var(--surface-hover)]"
                 onClick={() => onChoose(choice.destination)}
               >
                 <div className="flex items-start gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-600 dark:text-blue-200">
                     <Icon className="h-5 w-5" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="text-sm font-black text-white">{choice.label}</span>
+                      <span className="text-sm font-black text-[var(--text-primary)]">{choice.label}</span>
                       {choice.badge ? (
-                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-black text-slate-300">{choice.badge}</span>
+                        <span className="rounded-full bg-[var(--surface-subtle)] px-2 py-0.5 text-[10px] font-black text-[var(--text-secondary)]">{choice.badge}</span>
                       ) : null}
                     </span>
                     <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">{choice.description}</span>
                   </span>
-                  <ChevronRight className="mt-1 h-4 w-4 text-slate-600 transition group-hover:text-blue-200" />
+                  <ChevronRight className="mt-1 h-4 w-4 text-[var(--text-muted)] transition group-hover:text-blue-500" />
                 </div>
               </button>
             );
@@ -661,10 +671,10 @@ function MarketPanel({
 }) {
   return (
     <motion.div className="space-y-5" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-      <section className="rounded-[28px] border border-white/10 bg-[linear-gradient(135deg,rgba(16,26,44,0.98),rgba(7,16,29,0.98))] p-6">
-        <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-300/80">Market Radar</p>
-        <h2 className="mt-2 text-3xl font-black text-white">시장 지표</h2>
-        <p className="mt-2 text-sm font-semibold text-slate-400">환율, 금리, 원자재, 지수, 비트코인을 한 화면에서 봅니다.</p>
+      <section className="hero-card rounded-[28px] p-6">
+        <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-500">Market Radar</p>
+        <h2 className="mt-2 text-3xl font-black text-[var(--text-primary)]">시장 지표</h2>
+        <p className="mt-2 text-sm font-semibold text-[var(--text-secondary)]">환율, 금리, 원자재, 지수, 비트코인을 한 화면에서 봅니다.</p>
       </section>
       <MarketIndicatorsWidget data={data} loading={loading} error={error} />
     </motion.div>
@@ -698,17 +708,17 @@ function AlertCenterPanel({ summary, onNavigate }: { summary?: PortfolioSummary;
 
   return (
     <motion.div className="space-y-5" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-      <section className="rounded-[28px] border border-white/10 bg-[linear-gradient(135deg,rgba(16,26,44,0.98),rgba(7,16,29,0.98))] p-6">
-        <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-300/80">Alert Center</p>
-        <h2 className="mt-2 text-3xl font-black text-white">알림 센터</h2>
-        <p className="mt-2 text-sm font-semibold text-slate-400">계좌 중심으로 집중도, 환율, 배당 이벤트를 모아봅니다.</p>
+      <section className="hero-card rounded-[28px] p-6">
+        <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-500">Alert Center</p>
+        <h2 className="mt-2 text-3xl font-black text-[var(--text-primary)]">알림 센터</h2>
+        <p className="mt-2 text-sm font-semibold text-[var(--text-secondary)]">계좌 중심으로 집중도, 환율, 배당 이벤트를 모아봅니다.</p>
       </section>
       <div className="grid gap-4 lg:grid-cols-3">
         {alerts.map((alert) => (
           <button
             key={alert.title}
             type="button"
-            className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 text-left transition hover:-translate-y-0.5 hover:bg-white/[0.07]"
+            className="rounded-2xl border border-[var(--card-border)] bg-[var(--surface)] p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:bg-[var(--surface-hover)]"
             onClick={() => onNavigate(alert.action)}
           >
             <span
@@ -719,7 +729,7 @@ function AlertCenterPanel({ summary, onNavigate }: { summary?: PortfolioSummary;
                 alert.tone === "green" && "bg-emerald-400"
               )}
             />
-            <p className="text-base font-black text-white">{alert.title}</p>
+            <p className="text-base font-black text-[var(--text-primary)]">{alert.title}</p>
             <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{alert.description}</p>
             <p className="mt-4 flex items-center gap-1 text-xs font-black text-blue-300">
               자세히 보기 <ChevronRight className="h-4 w-4" />
@@ -759,7 +769,7 @@ function Overview({
 
   return (
     <motion.div
-      className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]"
+      className="min-w-0 space-y-4"
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: "easeOut" }}
@@ -767,18 +777,20 @@ function Overview({
       <div className="min-w-0 space-y-4">
         <OverviewHero data={data} />
         <MarketIndicatorsWidget data={marketIndicators} loading={marketIndicatorsLoading} error={marketIndicatorsError} />
-        <section className="grid gap-4 xl:grid-cols-3">
+        <section className="grid min-w-0 gap-4 min-[1536px]:grid-cols-3">
           <AllocationCard title="자산 구성 비중" data={assetAllocationFromHoldings(data.holdings)} center={formatKrw(data.metrics.totalMarketValue)} />
           <AccountValueCards data={data.accountValues} />
           <ReturnBarCard data={data.accountReturns} average={data.metrics.returnRate} />
         </section>
-        <section className="grid gap-4 xl:grid-cols-3">
+        <section className="grid min-w-0 gap-4 min-[1536px]:grid-cols-3">
           <TopHoldings data={data} />
           <DuplicateHoldings data={data} />
           <AiInsightCard data={data} onNavigate={onNavigate} />
         </section>
+        <div className="min-[1400px]:hidden">
+          <DashboardSidePanel data={data} onNavigate={onNavigate} />
+        </div>
       </div>
-        <DashboardSidePanel data={data} onNavigate={onNavigate} />
     </motion.div>
   );
 }
@@ -795,45 +807,45 @@ function AccountDashboard({
   const metrics = metricsFromHoldings(account.holdings);
   const allocation = assetAllocationFromHoldings(account.holdings);
   const accountWeight = summary.metrics.totalMarketValue > 0 ? (metrics.totalMarketValue / summary.metrics.totalMarketValue) * 100 : 0;
-  const profitTone = metrics.totalProfitLoss >= 0 ? "text-red-300" : "text-blue-300";
+  const profitTone = metrics.totalProfitLoss >= 0 ? "text-[#EF4444]" : "text-[#3B82F6]";
   const domesticValue = account.holdings.filter(isDomesticHolding).reduce((sum, holding) => sum + holding.marketValue, 0);
   const overseasValue = Math.max(0, metrics.totalMarketValue - domesticValue);
 
   return (
-    <motion.div className="space-y-5" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.42, ease: "easeOut" }}>
-      <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_12%_20%,rgba(59,130,246,0.30),transparent_28rem),linear-gradient(135deg,rgba(16,26,44,0.98),rgba(7,16,29,0.98))] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.34)] lg:p-8">
+    <motion.div className="min-w-0 space-y-5" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.42, ease: "easeOut" }}>
+      <section className="hero-card relative overflow-hidden rounded-[28px] p-6 lg:p-8">
         <div className="pointer-events-none absolute right-[-120px] top-[-120px] h-[320px] w-[320px] rounded-full bg-emerald-400/10 blur-3xl" />
-        <div className="relative grid gap-7 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
-          <div>
+        <div className="relative grid min-w-0 gap-7 xl:grid-cols-[minmax(0,1fr)_320px] min-[1536px]:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
+          <div className="min-w-0 overflow-hidden">
             <div className="flex flex-wrap items-center gap-2">
               <span className={cn("flex h-10 w-10 items-center justify-center rounded-2xl text-white", brokerAccentClass(account.broker))}>
                 {brokerShortLabel(account.broker).slice(0, 1)}
               </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.07] px-3 py-1 text-xs font-black text-slate-300">
+              <span className="theme-pill rounded-full px-3 py-1 text-xs font-black">
                 {account.brokerLabel} · {accountTypeLabel(account.accountType)}
               </span>
             </div>
-            <p className="mt-6 text-sm font-black uppercase tracking-[0.28em] text-blue-200/80">계좌 자산</p>
-            <p className="mt-4 text-5xl font-black tracking-[-0.02em] text-white md:text-6xl">
+            <p className="mt-6 text-sm font-black uppercase tracking-[0.28em] text-blue-500">계좌 자산</p>
+            <p className="numeric mt-4 block max-w-full overflow-hidden text-[40px] font-black text-[var(--text-primary)]">
               <AnimatedKrw value={metrics.totalMarketValue} />
             </p>
-            <div className="mt-4 flex flex-wrap items-end gap-x-4 gap-y-2">
-              <p className={cn("text-2xl font-black md:text-3xl", profitTone)}>{formatSignedKrw(metrics.totalProfitLoss)}</p>
-              <p className={cn("text-lg font-black", profitTone)}>({formatPercent(metrics.returnRate)})</p>
-              <span className="rounded-full border border-white/10 bg-white/[0.07] px-3 py-1 text-xs font-black text-slate-300">
+            <div className="mt-4 flex max-w-full items-end gap-x-4 gap-y-2 overflow-hidden">
+              <p className={cn("numeric min-w-0 overflow-hidden text-2xl font-black", profitTone)}>{formatSignedKrw(metrics.totalProfitLoss)}</p>
+              <p className={cn("numeric shrink-0 text-lg font-black", profitTone)}>({formatPercent(metrics.returnRate)})</p>
+              <span className="theme-pill rounded-full px-3 py-1 text-xs font-black">
                 전체 자산의 {accountWeight.toFixed(1)}%
               </span>
             </div>
           </div>
-          <div className="grid gap-3">
-            <HeroMetric label="보유 종목" value={`${account.holdings.length}개`} caption={`${account.brokerLabel} 단일 계좌`} tone="text-blue-200" icon={BriefcaseBusiness} />
-            <HeroMetric label="연간 배당" value={formatKrw(metrics.annualDividendEstimate)} caption="보유 종목 추정 기준" tone="text-violet-300" icon={Gift} />
-            <HeroMetric label="달러 노출" value={`${metrics.fxExposureRate.toFixed(1)}%`} caption={`해외자산 ${formatKrw(overseasValue)}`} tone="text-emerald-300" icon={Globe2} />
+          <div className="grid min-w-0 gap-3">
+            <HeroMetric label="보유 종목" value={`${account.holdings.length}개`} caption={`${account.brokerLabel} 단일 계좌`} tone="text-blue-600 dark:text-blue-200" icon={BriefcaseBusiness} />
+            <HeroMetric label="연간 배당" value={formatKrw(metrics.annualDividendEstimate)} caption="보유 종목 추정 기준" tone="text-violet-600 dark:text-violet-300" icon={Gift} />
+            <HeroMetric label="달러 노출" value={`${metrics.fxExposureRate.toFixed(1)}%`} caption={`해외자산 ${formatKrw(overseasValue)}`} tone="text-emerald-600 dark:text-emerald-300" icon={Globe2} />
           </div>
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1fr_0.86fr]">
+      <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.86fr)]">
         <AllocationCard title="계좌 자산 구성" data={allocation} center={formatKrw(metrics.totalMarketValue)} />
         <Card>
           <CardHeader>
@@ -861,16 +873,16 @@ function AccountDashboard({
 
 function AccountInsightRow({ label, value, tone }: { label: string; value: string; tone: "blue" | "green" | "purple" | "red" }) {
   const toneClass = {
-    blue: "bg-blue-500/15 text-blue-200",
-    green: "bg-emerald-500/15 text-emerald-200",
-    purple: "bg-violet-500/15 text-violet-200",
-    red: "bg-red-500/15 text-red-200"
+    blue: "bg-blue-500/15 text-blue-700 dark:text-blue-200",
+    green: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200",
+    purple: "bg-violet-500/15 text-violet-700 dark:text-violet-200",
+    red: "bg-red-500/15 text-red-700 dark:text-red-200"
   }[tone];
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.045] p-4">
-      <span className="text-sm font-bold text-slate-400">{label}</span>
-      <span className={cn("rounded-full px-3 py-1 text-sm font-black", toneClass)}>{value}</span>
+    <div className="flex min-w-0 items-center justify-between gap-4 overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-4">
+      <span className="min-w-0 truncate text-sm font-bold text-[var(--text-secondary)]">{label}</span>
+      <span className={cn("numeric max-w-[168px] shrink-0 overflow-hidden text-ellipsis rounded-full px-3 py-1 text-sm font-black", toneClass)}>{value}</span>
     </div>
   );
 }
@@ -888,36 +900,37 @@ function OverviewHero({ data }: { data: PortfolioSummary }) {
 
   return (
     <motion.section
-      className="relative min-h-[260px] overflow-hidden rounded-2xl border border-white/[0.04] bg-[#0D1729] px-7 py-7 shadow-[0_16px_42px_rgba(0,0,0,0.14)] min-[1400px]:h-[260px] min-[1400px]:px-8"
+      className="hero-card relative min-h-[260px] min-w-0 overflow-hidden rounded-[18px] px-5 py-6 min-[1400px]:h-[260px] min-[1400px]:px-6 2xl:px-8"
+      data-hero-card
       initial={{ opacity: 0, scale: 0.985 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.55, ease: "easeOut" }}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_58%_50%,rgba(59,130,246,0.18),transparent_22rem)]" />
-      <div className="relative grid min-h-full grid-cols-1 gap-7 min-[1400px]:grid-cols-[360px_minmax(0,1fr)_270px]">
-        <div className="flex flex-col justify-center">
-          <p className="text-[14px] font-medium text-white">내 총 자산</p>
-          <p className="mt-6 text-[56px] font-bold leading-none tracking-[-0.035em] text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_58%_50%,rgba(59,130,246,0.12),transparent_22rem)] dark:bg-[radial-gradient(circle_at_58%_50%,rgba(59,130,246,0.18),transparent_22rem)]" />
+      <div className="relative grid min-h-full min-w-0 grid-cols-1 gap-6 min-[1400px]:grid-cols-[360px_minmax(0,1fr)_260px]">
+        <div className="flex min-w-0 flex-col justify-center overflow-hidden" data-hero-summary>
+          <p className="text-[14px] font-medium text-[var(--text-secondary)]">내 총 자산</p>
+          <p className="numeric mt-6 block w-[360px] max-w-full overflow-hidden text-[40px] font-bold leading-none text-[var(--text-primary)]" data-hero-asset-value>
             <AnimatedKrw value={data.metrics.totalMarketValue} />
           </p>
-          <div className="mt-5 flex items-end gap-3">
-            <p className={cn("text-[32px] font-bold leading-none tracking-[-0.025em]", profitTone)}>
+          <div className="mt-5 flex w-[360px] max-w-full items-end gap-3 overflow-hidden" data-hero-profit-row>
+            <p className={cn("numeric min-w-0 overflow-hidden text-[26px] font-bold leading-none", profitTone)}>
               {formatSignedKrw(data.metrics.totalProfitLoss)}
             </p>
-            <p className={cn("pb-0.5 text-[22px] font-bold leading-none", profitTone)}>({formatPercent(data.metrics.returnRate)})</p>
+            <p className={cn("numeric shrink-0 pb-0.5 text-[18px] font-bold leading-none", profitTone)}>({formatPercent(data.metrics.returnRate)})</p>
           </div>
-          <button className="mt-7 flex h-8 w-fit items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.04] px-3 text-[12px] font-normal text-[#94A3B8] transition hover:bg-[#12203A]">
+          <button className="theme-pill mt-7 flex h-8 w-fit items-center gap-2 rounded-full px-3 text-[12px] font-normal">
             전일 대비
           </button>
         </div>
 
-        <div className="relative flex min-w-0 items-center">
-          <div className="absolute right-0 top-0 z-10 flex h-8 items-center gap-2 rounded-xl border border-white/[0.05] bg-[#07111F]/70 px-3 text-[12px] text-slate-300">
+        <div className="relative flex h-[180px] min-w-0 items-center overflow-hidden min-[1400px]:h-full" data-hero-chart>
+          <div className="theme-pill absolute right-0 top-0 z-10 flex h-8 items-center gap-2 rounded-xl px-3 text-[12px]">
             전체 계좌
-            <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+            <ChevronDown className="h-3.5 w-3.5 text-[var(--text-muted)]" />
           </div>
-          <div className="pointer-events-none absolute left-8 right-4 top-1/2 h-28 -translate-y-1/2 rounded-full bg-[#3B82F6]/25 blur-3xl" />
-          <ResponsiveContainer width="100%" height={165}>
+          <div className="pointer-events-none absolute left-8 right-4 top-1/2 h-28 -translate-y-1/2 rounded-full bg-[#3B82F6]/15 blur-3xl dark:bg-[#3B82F6]/25" />
+          <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={heroChart} margin={{ top: 18, right: 8, bottom: 10, left: 8 }}>
               <defs>
                 <linearGradient id="heroLineFill" x1="0" y1="0" x2="0" y2="1">
@@ -937,16 +950,16 @@ function OverviewHero({ data }: { data: PortfolioSummary }) {
           </ResponsiveContainer>
         </div>
 
-        <div className="flex flex-col justify-center pl-2">
-          <p className="text-[14px] font-medium text-[#94A3B8]">오늘 자산 변동</p>
-          <p className={cn("mt-2 text-[28px] font-bold leading-none", todayTone)}>{formatSignedKrw(movement.totalChange)}</p>
-          <p className={cn("mt-1 text-[16px] font-bold", todayTone)}>({formatPercent(movement.totalChange / Math.max(1, data.metrics.totalMarketValue) * 100)})</p>
+        <div className="flex min-w-0 flex-col justify-center overflow-hidden pl-0 min-[1400px]:pl-2" data-hero-today>
+          <p className="text-[14px] font-medium text-[var(--text-secondary)]">오늘 자산 변동</p>
+          <p className={cn("numeric mt-2 block w-[240px] max-w-full overflow-hidden text-[26px] font-bold leading-none", todayTone)}>{formatSignedKrw(movement.totalChange)}</p>
+          <p className={cn("numeric mt-1 block w-[180px] max-w-full overflow-hidden text-[16px] font-bold", todayTone)}>({formatPercent(movement.totalChange / Math.max(1, data.metrics.totalMarketValue) * 100)})</p>
           <div className="mt-4 space-y-2 text-[13px]">
             <HeroMovementRow label="주가 영향" value={movement.stockImpact} />
             <HeroMovementRow label="환율 영향" value={movement.fxImpact} />
             <HeroMovementRow label="배당 영향" value={movement.dividendImpact} />
           </div>
-          <p className="mt-4 text-[12px] font-normal text-[#94A3B8]">조회 시간 {formatHeaderTime(new Date().toISOString())} 기준</p>
+          <p className="mt-4 text-[12px] font-normal text-[var(--text-muted)]">조회 시간 {formatHeaderTime(new Date().toISOString())} 기준</p>
         </div>
       </div>
     </motion.section>
@@ -955,9 +968,9 @@ function OverviewHero({ data }: { data: PortfolioSummary }) {
 
 function HeroMovementRow({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="font-normal text-[#94A3B8]">{label}</span>
-      <span className={cn("font-semibold", value >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>{formatSignedKrw(value)}</span>
+    <div className="flex min-w-0 items-center justify-between gap-4 overflow-hidden">
+      <span className="min-w-0 truncate font-normal text-[var(--text-secondary)]">{label}</span>
+      <span className={cn("numeric min-w-[116px] shrink-0 overflow-hidden text-right font-semibold", value >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>{formatSignedKrw(value)}</span>
     </div>
   );
 }
@@ -976,15 +989,15 @@ function HeroMetric({
   icon: ElementType;
 }) {
   return (
-    <motion.div className="rounded-2xl border border-white/10 bg-white/[0.055] p-4" whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
+    <motion.div className="min-w-0 overflow-hidden rounded-2xl border border-[var(--card-border)] bg-white/70 p-4 shadow-sm backdrop-blur dark:bg-white/[0.055]" whileHover={{ y: -2 }} transition={{ duration: 0.18 }}>
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-black text-slate-400">{label}</p>
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-slate-200">
+        <p className="text-xs font-black text-[var(--text-secondary)]">{label}</p>
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary-soft)] text-[var(--primary)]">
           <Icon className="h-4 w-4" />
         </span>
       </div>
-      <p className={cn("mt-3 text-2xl font-black tracking-tight", tone)}>{value}</p>
-      <p className="mt-1 text-xs font-semibold text-slate-500">{caption}</p>
+      <p className={cn("numeric mt-3 overflow-hidden text-2xl font-black", tone)}>{value}</p>
+      <p className="mt-1 text-xs font-semibold text-[var(--text-secondary)]">{caption}</p>
     </motion.div>
   );
 }
@@ -1025,21 +1038,21 @@ function KpiCard({
   tone: "blue" | "red" | "purple" | "green";
 }) {
   const toneClass = {
-    blue: "bg-blue-500/15 text-blue-300",
-    red: "bg-red-500/15 text-red-300",
-    purple: "bg-purple-500/15 text-purple-300",
-    green: "bg-emerald-500/15 text-emerald-300"
+    blue: "bg-blue-500/15 text-blue-600 dark:text-blue-300",
+    red: "bg-red-500/15 text-red-600 dark:text-red-300",
+    purple: "bg-purple-500/15 text-purple-600 dark:text-purple-300",
+    green: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
   }[tone];
   return (
-    <Card className="relative overflow-hidden p-5">
-      <div className="flex items-start gap-4">
+    <Card className="relative p-5">
+      <div className="flex min-w-0 items-start gap-4">
         <span className={cn("flex h-12 w-12 items-center justify-center rounded-xl", toneClass)}>
           <Icon className="h-6 w-6" />
         </span>
-        <div>
-          <p className="text-sm font-bold text-slate-400">{label}</p>
-          <p className="mt-2 whitespace-nowrap text-xl font-black text-white xl:text-2xl">{value}</p>
-          <p className={cn("mt-2 text-sm", tone === "red" ? "text-red-300" : "text-slate-500")}>{caption}</p>
+        <div className="min-w-0 overflow-hidden">
+          <p className="text-sm font-bold text-[var(--text-secondary)]">{label}</p>
+          <p className="numeric mt-2 block min-w-[178px] max-w-full overflow-hidden text-ellipsis text-xl font-black text-[var(--text-primary)] xl:text-2xl">{value}</p>
+          <p className={cn("mt-2 truncate text-sm", tone === "red" ? "text-red-600 dark:text-red-300" : "text-[var(--text-secondary)]")}>{caption}</p>
         </div>
       </div>
     </Card>
@@ -1060,22 +1073,22 @@ function MarketIndicatorsWidget({
   const messages = [error?.message, ...(data?.errors ?? [])].filter(Boolean);
 
   return (
-    <section className="rounded-2xl border border-white/[0.04] bg-[#0D1729] p-3 shadow-[0_14px_36px_rgba(0,0,0,0.12)]">
-      <div className="flex items-center justify-between gap-3 px-1">
-        <div>
-          <h2 className="text-[20px] font-semibold leading-none text-slate-100">시장 주요 지표</h2>
+    <section className="market-widget min-w-0 overflow-hidden rounded-[18px] p-3" data-market-widget>
+      <div className="flex min-w-0 items-center justify-between gap-3 px-1">
+        <div className="min-w-0">
+          <h2 className="text-[20px] font-semibold leading-none text-[var(--text-primary)]">시장 주요 지표</h2>
         </div>
-        <div className="flex items-center gap-3 text-[12px] font-medium text-[#94A3B8]">
-          <span>{formatHeaderTime(data?.lastSuccessAt)} 기준</span>
+        <div className="flex shrink-0 items-center gap-3 text-[12px] font-medium text-[var(--text-secondary)]">
+          <span className="numeric">{formatHeaderTime(data?.lastSuccessAt)} 기준</span>
           {loading ? <Loader2 className="h-4 w-4 animate-spin text-[#3B82F6]" /> : <CheckCircle2 className="h-4 w-4 text-[#22C55E]" />}
-          <button className="flex items-center gap-1 text-slate-400 transition hover:text-white" onClick={() => alert("좌측 메뉴의 시장 지표 화면에서 전체 지표를 확인할 수 있습니다.")}>
+          <button className="flex items-center gap-1 text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]" onClick={() => alert("좌측 메뉴의 시장 지표 화면에서 전체 지표를 확인할 수 있습니다.")}>
             더보기
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>
       {messages.length > 0 ? (
-        <div className="mt-3 flex gap-2 rounded-xl border border-orange-400/20 bg-orange-500/10 px-4 py-3 text-sm text-orange-200">
+        <div className="mt-3 flex gap-2 rounded-xl border border-orange-400/20 bg-orange-500/10 px-4 py-3 text-sm text-orange-700 dark:text-orange-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <p className="font-black">시장 지표 갱신 지연</p>
@@ -1084,13 +1097,13 @@ function MarketIndicatorsWidget({
         </div>
       ) : null}
       {indicators.length === 0 ? (
-        <div className="mt-3 flex gap-3 overflow-x-auto premium-scrollbar">
+        <div className="mt-3 flex w-full min-w-0 gap-3 overflow-x-auto premium-scrollbar">
           {Array.from({ length: 7 }).map((_, index) => (
-            <div key={index} className="h-[84px] min-w-[154px] animate-pulse rounded-xl border border-white/[0.05] bg-white/[0.04]" />
+            <div key={index} className="h-[92px] w-[156px] shrink-0 animate-pulse rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)]" />
           ))}
         </div>
       ) : (
-        <div className="mt-3 flex gap-3 overflow-x-auto pb-1 premium-scrollbar">
+        <div className="mt-3 flex w-full min-w-0 gap-3 overflow-x-auto pb-1 premium-scrollbar" data-market-strip>
           {indicators.map((indicator) => (
             <MarketIndicatorCard key={indicator.symbol} indicator={indicator} />
           ))}
@@ -1107,36 +1120,56 @@ function MarketIndicatorCard({ indicator }: { indicator: MarketIndicatorsResult[
   const changePrefix = positive ? "▲" : negative ? "▼" : "━";
 
   return (
-    <motion.div className="relative h-[84px] min-w-[154px] overflow-hidden rounded-xl border border-white/[0.05] bg-[#111C30] p-3" whileHover={{ y: -2, backgroundColor: "#12203A" }} transition={{ duration: 0.18 }}>
-      <div className="flex items-start justify-between gap-2">
+    <motion.div
+      className="market-indicator-card relative h-[92px] w-[156px] shrink-0 overflow-hidden rounded-xl"
+      data-market-indicator-card
+      whileHover={{ y: -2, backgroundColor: "var(--surface-hover)" }}
+      transition={{ duration: 0.18 }}
+    >
+      <div className="relative z-10 flex h-full min-w-0 flex-col justify-between p-3">
         <div className="min-w-0">
-          <p className="truncate text-[12px] font-medium text-[#94A3B8]">{compactIndicatorName(indicator.name, indicator.symbol)}</p>
-          <p className="mt-1 whitespace-nowrap text-[18px] font-semibold leading-none text-white">{formatMarketIndicatorValue(indicator)}</p>
+          <p className="truncate text-[12px] font-medium leading-4 text-[var(--text-secondary)]">{compactIndicatorName(indicator.name, indicator.symbol)}</p>
+          <p className="numeric mt-0.5 block max-w-[120px] overflow-hidden text-ellipsis text-[19px] font-bold leading-[19px] text-[var(--text-primary)]">{formatMarketIndicatorValue(indicator)}</p>
         </div>
+        {indicator.symbol === "FEAR_GREED" ? (
+          <p className={cn("max-w-[72px] truncate text-[12px] font-semibold leading-4", tone.text)}>{fearGreedLabel(indicator.rawStatus)}</p>
+        ) : (
+          <p className={cn("numeric max-w-[72px] overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-semibold leading-4", tone.text)}>
+            {changePrefix} {formatMarketIndicatorChange(indicator)} ({formatPercent(indicator.changeRate)})
+          </p>
+        )}
       </div>
-      {indicator.symbol === "FEAR_GREED" ? (
-        <p className={cn("mt-2 text-[12px] font-semibold", tone.text)}>{fearGreedLabel(indicator.rawStatus)}</p>
-      ) : (
-        <p className={cn("mt-2 text-[12px] font-semibold", tone.text)}>
-          {changePrefix} {formatMarketIndicatorChange(indicator)} ({formatPercent(indicator.changeRate)})
-        </p>
-      )}
-      <MiniSparkline className={cn("absolute bottom-2 right-3 h-8 w-16", positive ? "text-[#22C55E]" : negative ? "text-[#3B82F6]" : "text-[#94A3B8]")} seed={indicator.value + indicator.changeRate} />
+      <div
+        className={cn(
+          "pointer-events-none absolute bottom-3 right-3 h-[28px] w-[58px] overflow-hidden",
+          positive ? "text-[#22C55E]" : negative ? "text-[#3B82F6]" : "text-[#94A3B8]"
+        )}
+        data-market-sparkline
+      >
+        <MiniSparkline changeRate={indicator.changeRate} />
+      </div>
     </motion.div>
   );
 }
 
-function MiniSparkline({ className, seed }: { className?: string; seed: number }) {
-  const points = Array.from({ length: 14 }).map((_, index) => {
-    const wave = Math.sin(index * 0.85 + seed) * 9;
-    const trend = ((index / 13) - 0.5) * Math.sign(seed || 1) * 8;
-    return `${(index / 13) * 64},${18 - wave * 0.55 - trend}`;
+function MiniSparkline({ className, changeRate }: { className?: string; changeRate: number }) {
+  const direction = changeRate > 0 ? 1 : changeRate < 0 ? -1 : 0;
+  const magnitude = Math.min(1, Math.abs(changeRate) / 5);
+  const sparklineData = Array.from({ length: 10 }).map((_, index) => {
+    const t = index / 9;
+    const trend = direction * (t - 0.5) * (12 + magnitude * 8);
+    const wave = Math.sin(t * Math.PI * 2) * (direction === 0 ? 0.6 : 1.4);
+    return { value: 50 + trend + wave };
   });
 
   return (
-    <svg viewBox="0 0 64 36" aria-hidden="true" className={className}>
-      <path d={`M ${points.join(" L ")}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
-    </svg>
+    <div className={cn("h-[28px] w-[58px] overflow-hidden", className)}>
+      <ResponsiveContainer width="100%" height="100%">
+        <RechartsLineChart data={sparklineData} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+          <RechartsLine type="monotone" dataKey="value" stroke="currentColor" strokeWidth={2} dot={false} isAnimationActive={false} />
+        </RechartsLineChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
@@ -1154,7 +1187,7 @@ function TodayAssetMovementCard({ data }: { data: PortfolioSummary }) {
         <CardTitle>오늘 자산 변동</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid min-w-0 gap-3 md:grid-cols-4">
           <MovementCell label="주가 영향" value={movement.stockImpact} />
           <MovementCell label="환율 영향" value={movement.fxImpact} />
           <MovementCell label="배당 영향" value={movement.dividendImpact} />
@@ -1167,9 +1200,9 @@ function TodayAssetMovementCard({ data }: { data: PortfolioSummary }) {
 
 function MovementCell({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) {
   return (
-    <div className={cn("rounded-xl bg-white/[0.05] p-4", strong && "bg-blue-500/10")}>
+    <div className={cn("min-w-0 overflow-hidden rounded-xl bg-[var(--surface-subtle)] p-4", strong && "bg-blue-500/10")}>
       <p className="text-xs font-black text-slate-500">{label}</p>
-      <p className={cn("mt-2 text-lg font-black", value >= 0 ? "text-emerald-300" : "text-blue-300", strong && "text-2xl")}>
+      <p className={cn("numeric mt-2 overflow-hidden text-lg font-black", value >= 0 ? "text-emerald-600 dark:text-emerald-300" : "text-blue-600 dark:text-blue-300", strong && "text-2xl")}>
         {formatSignedKrw(value)}
       </p>
     </div>
@@ -1198,23 +1231,23 @@ function DashboardSidePanel({ data, onNavigate }: { data: PortfolioSummary; onNa
         </CardHeader>
         <CardContent>
           <div>
-            <p className="text-[13px] font-normal text-[#94A3B8]">USD/KRW 환율</p>
-            <p className="mt-2 text-[26px] font-semibold leading-none text-white">1,387.20원</p>
-            <p className="mt-2 text-[13px] font-semibold text-[#EF4444]">▲ 6.20&nbsp;&nbsp;+0.45%</p>
+            <p className="text-[13px] font-normal text-[var(--text-secondary)]">USD/KRW 환율</p>
+            <p className="numeric mt-2 block min-w-[156px] overflow-hidden text-[26px] font-semibold leading-none text-[var(--text-primary)]">1,387.20원</p>
+            <p className="numeric mt-2 text-[13px] font-semibold text-[#EF4444]">▲ 6.20&nbsp;&nbsp;+0.45%</p>
           </div>
-          <MiniSparkline className="mt-3 h-10 w-full text-[#22C55E]" seed={fxExposureRate} />
+          <MiniSparkline className="mt-3 h-10 w-full text-[#22C55E]" changeRate={fxExposureRate} />
           <div className="mt-3">
             <div className="flex items-center justify-between">
-              <p className="text-[13px] font-normal text-[#94A3B8]">달러 노출도</p>
+              <p className="text-[13px] font-normal text-[var(--text-secondary)]">달러 노출도</p>
               <span className="rounded-lg bg-[#EF4444]/18 px-3 py-1 text-[12px] font-semibold text-[#EF4444]">매우 높음</span>
             </div>
-            <p className="mt-2 text-[30px] font-semibold leading-none text-white">{fxExposureRate.toFixed(1)}%</p>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.08]">
+            <p className="numeric mt-2 block min-w-[112px] overflow-hidden text-[30px] font-semibold leading-none text-[var(--text-primary)]">{fxExposureRate.toFixed(1)}%</p>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-subtle)]">
               <div className="h-full rounded-full bg-gradient-to-r from-[#3B82F6] to-[#8B5CF6]" style={{ width: `${Math.min(100, fxExposureRate)}%` }} />
             </div>
-            <div className="mt-3 flex items-center justify-between text-[12px] text-[#94A3B8]">
+            <div className="mt-3 flex items-center justify-between text-[12px] text-[var(--text-secondary)]">
               <span>원화 비중</span>
-              <span className="text-white">{krwWeight.toFixed(1)}%</span>
+              <span className="numeric text-[var(--text-primary)]">{krwWeight.toFixed(1)}%</span>
             </div>
           </div>
         </CardContent>
@@ -1230,7 +1263,7 @@ function DashboardSidePanel({ data, onNavigate }: { data: PortfolioSummary; onNa
           {alerts.map((alert) => (
             <SideAlertRow key={alert.title} title={alert.title} detail={alert.detail} tone={alert.tone} onClick={() => onNavigate(alert.view)} />
           ))}
-          <Button className="mt-1 h-9 w-full rounded-xl bg-white/[0.05] text-[13px] font-medium hover:bg-[#12203A]" variant="dark" onClick={() => onNavigate("settings")}>
+          <Button className="mt-1 h-9 w-full rounded-xl text-[13px] font-medium" variant="dark" onClick={() => onNavigate("settings")}>
             알림 설정
           </Button>
         </CardContent>
@@ -1246,6 +1279,25 @@ function DashboardSidePanel({ data, onNavigate }: { data: PortfolioSummary; onNa
           {calendar.map((item) => (
             <CalendarRow key={item.title} title={item.title} date={item.date} tone={item.tone} onClick={() => onNavigate(item.view)} />
           ))}
+        </CardContent>
+      </Card>
+    </aside>
+  );
+}
+
+function RightPanelPlaceholder({ loading }: { loading: boolean }) {
+  return (
+    <aside className="space-y-4">
+      <Card className="min-h-[310px]">
+        <CardHeader>
+          <CardTitle>요약 패널</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {Array.from({ length: loading ? 4 : 2 }).map((_, index) => (
+              <div key={index} className="h-12 animate-pulse rounded-xl bg-[var(--surface-subtle)]" />
+            ))}
+          </div>
         </CardContent>
       </Card>
     </aside>
@@ -1270,13 +1322,13 @@ function SideAlertRow({
   }[tone];
 
   return (
-    <button type="button" className="flex w-full items-start gap-3 rounded-xl p-1.5 text-left transition hover:bg-white/[0.05]" onClick={onClick}>
+    <button type="button" className="flex w-full items-start gap-3 rounded-xl p-1.5 text-left transition hover:bg-[var(--surface-hover)]" onClick={onClick}>
       <span className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold", toneClass)}>
         {tone === "danger" ? "!" : tone === "info" ? "i" : "✓"}
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-[13px] font-medium text-slate-100">{title}</span>
-        <span className="mt-1 block text-[12px] font-normal text-[#94A3B8]">{detail}</span>
+        <span className="block truncate text-[13px] font-medium text-[var(--text-primary)]">{title}</span>
+        <span className="mt-1 block text-[12px] font-normal text-[var(--text-secondary)]">{detail}</span>
       </span>
     </button>
   );
@@ -1300,13 +1352,13 @@ function CalendarRow({
   }[tone];
 
   return (
-    <button type="button" className="flex w-full items-start gap-3 rounded-xl p-1.5 text-left transition hover:bg-white/[0.05]" onClick={onClick}>
+    <button type="button" className="flex w-full items-start gap-3 rounded-xl p-1.5 text-left transition hover:bg-[var(--surface-hover)]" onClick={onClick}>
       <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold", toneClass)}>
         {tone === "dividend" ? "배" : tone === "macro" ? "지" : "회"}
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-[13px] font-medium text-slate-100">{title}</span>
-        <span className="mt-1 block text-[12px] font-normal text-[#94A3B8]">{date}</span>
+        <span className="block truncate text-[13px] font-medium text-[var(--text-primary)]">{title}</span>
+        <span className="mt-1 block text-[12px] font-normal text-[var(--text-secondary)]">{date}</span>
       </span>
     </button>
   );
@@ -1320,9 +1372,9 @@ function AllocationCard({ title, data, center }: { title: string; data: Portfoli
           <CardTitle>{title}</CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="grid gap-3 md:grid-cols-[190px_1fr] md:items-center">
-        <div className="relative h-[210px]">
-          <ResponsiveContainer>
+      <CardContent className="grid min-w-0 gap-3 md:grid-cols-[190px_minmax(0,1fr)] md:items-center">
+        <div className="relative h-[210px] min-w-0 overflow-hidden">
+          <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie data={data} innerRadius={56} outerRadius={94} dataKey="value" paddingAngle={2} animationDuration={900}>
                 {data.map((entry) => (
@@ -1333,24 +1385,24 @@ function AllocationCard({ title, data, center }: { title: string; data: Portfoli
             </PieChart>
           </ResponsiveContainer>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-            <p className="text-[12px] font-normal text-[#94A3B8]">총 자산</p>
-            <p className="mt-1 text-[13px] font-semibold text-white">{center}</p>
+            <p className="text-[12px] font-normal text-[var(--text-secondary)]">총 자산</p>
+            <p className="numeric mt-1 max-w-[132px] overflow-hidden text-ellipsis text-[13px] font-semibold text-[var(--text-primary)]">{center}</p>
           </div>
         </div>
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           {data.map((item) => (
-            <div key={item.name}>
-              <div className="flex items-start justify-between gap-3">
-                <span className="flex items-center gap-2 text-[13px] font-normal text-[#94A3B8]">
+            <div key={item.name} className="min-w-0 overflow-hidden">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-2 text-[13px] font-normal text-[var(--text-secondary)]">
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
-                  {item.name}
+                  <span className="truncate">{item.name}</span>
                 </span>
-                <span className="text-right text-[14px] font-semibold text-white">
+                <span className="numeric shrink-0 text-right text-[14px] font-semibold text-[var(--text-primary)]">
                   {(item.rate ?? 0).toFixed(1)}%
-                  <span className="block text-[11px] font-normal text-[#94A3B8]">{formatKrw(item.value)}</span>
+                  <span className="block max-w-[112px] overflow-hidden text-ellipsis text-[11px] font-normal text-[var(--text-secondary)]">{formatKrw(item.value)}</span>
                 </span>
               </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface-subtle)]">
                 <div className="h-full rounded-full" style={{ width: `${Math.min(100, item.rate ?? 0)}%`, backgroundColor: item.color }} />
               </div>
             </div>
@@ -1371,34 +1423,34 @@ function AccountValueCards({ data }: { data: PortfolioSummary["accountValues"] }
           <CardTitle>계좌별 평가금액</CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="min-w-0 space-y-3">
         {data.map((item, index) => {
           const rate = total > 0 ? (item.value / total) * 100 : item.rate ?? 0;
           const displayName = cleanDisplayName(item.name);
           return (
             <motion.div
               key={item.name}
-              className="rounded-xl border border-white/[0.04] bg-white/[0.035] p-3"
+              className="min-w-0 overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--surface)] p-3 transition hover:bg-[var(--surface-hover)]"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05, duration: 0.25 }}
               whileHover={{ y: -2 }}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <span className="flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-[0_8px_20px_rgba(0,0,0,0.20)]" style={{ backgroundColor: item.color }}>
                     <Wallet className="h-5 w-5" />
                   </span>
-                  <div>
-                    <p className="text-[13px] font-semibold text-white">{displayName}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{displayName}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-[16px] font-semibold text-white">{formatKrw(item.value)}</p>
-                  <p className="mt-1 text-[11px] font-normal text-[#94A3B8]">{rate.toFixed(1)}%</p>
+                <div className="shrink-0 text-right">
+                  <p className="numeric max-w-[136px] overflow-hidden text-ellipsis text-[16px] font-semibold text-[var(--text-primary)]">{formatKrw(item.value)}</p>
+                  <p className="numeric mt-1 text-[11px] font-normal text-[var(--text-secondary)]">{rate.toFixed(1)}%</p>
                 </div>
               </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--surface-subtle)]">
                 <motion.div
                   className="h-full rounded-full"
                   style={{ backgroundColor: item.color }}
@@ -1423,9 +1475,9 @@ function ReturnBarCard({ data, average }: { data: PortfolioSummary["accountRetur
       <CardHeader>
         <CardTitle>계좌별 수익률 비교</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="h-[222px]">
-          <ResponsiveContainer>
+      <CardContent className="min-w-0">
+        <div className="h-[222px] min-w-0 overflow-hidden">
+          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={displayData}>
               <CartesianGrid vertical={false} stroke="rgba(148,163,184,0.10)" />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#94A3B8", fontSize: 12, fontWeight: 400 }} />
@@ -1439,7 +1491,7 @@ function ReturnBarCard({ data, average }: { data: PortfolioSummary["accountRetur
             </BarChart>
           </ResponsiveContainer>
         </div>
-        <p className="text-right text-[12px] font-normal text-[#94A3B8]">전체 평균 <span className="font-semibold text-[#3B82F6]">{formatPercent(average)}</span></p>
+        <p className="text-right text-[12px] font-normal text-[#94A3B8]">전체 평균 <span className="numeric font-semibold text-[#3B82F6]">{formatPercent(average)}</span></p>
       </CardContent>
     </Card>
   );
@@ -1449,11 +1501,15 @@ type HoldingSortKey = "value" | "weight" | "return";
 
 type AggregatedHolding = {
   key: string;
+  securityId: string;
   symbol: string;
   name: string;
   marketCountry: string;
   currency: string;
   assetType: string;
+  logoUrl: string | null;
+  companyDomain: string | null;
+  logoSource: string;
   totalQuantity: number;
   marketValue: number;
   costAmount: number;
@@ -1485,8 +1541,8 @@ function AggregatedHoldingsList({ data }: { data: PortfolioSummary }) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div>
+        <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
             <CardTitle>보유종목 리스트</CardTitle>
             <p className="mt-2 text-sm font-semibold text-slate-500">종목 단위 합산 · 다중 증권사 보유 · 계좌별 수량 분해</p>
           </div>
@@ -1524,13 +1580,18 @@ function AggregatedHoldingsList({ data }: { data: PortfolioSummary }) {
               return (
                 <div key={holding.key} className="py-3">
                   <button
-                    className="grid w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-slate-50 md:grid-cols-[1fr_210px_190px]"
+                    className="grid w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl p-2 text-left transition hover:bg-slate-50 md:grid-cols-[minmax(0,1fr)_190px_170px]"
                     onClick={() => setExpandedKey(expanded ? null : holding.key)}
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-black text-slate-700">
-                        {holding.symbol.slice(0, 2)}
-                      </div>
+                      <SecurityLogo
+                        symbol={holding.symbol}
+                        name={holding.name}
+                        logoUrl={holding.logoUrl}
+                        marketCountry={holding.marketCountry}
+                        size="sm"
+                        showCountryBadge
+                      />
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate text-base font-black text-slate-950">{holding.symbol}</p>
@@ -1549,10 +1610,10 @@ function AggregatedHoldingsList({ data }: { data: PortfolioSummary }) {
                         </p>
                       </div>
                     </div>
-                    <div className="space-y-2">
+                    <div className="min-w-0 space-y-2">
                       <div className="flex items-center justify-between text-xs font-bold">
                         <span className="text-slate-500">전체 비중</span>
-                        <span className="text-slate-950">{holding.portfolioWeight.toFixed(1)}%</span>
+                        <span className="numeric text-slate-950">{holding.portfolioWeight.toFixed(1)}%</span>
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                         <div className="h-full rounded-full bg-blue-600" style={{ width: `${Math.min(100, holding.portfolioWeight)}%` }} />
@@ -1565,10 +1626,10 @@ function AggregatedHoldingsList({ data }: { data: PortfolioSummary }) {
                         ))}
                       </div>
                     </div>
-                    <div className="flex items-center justify-between gap-3 md:justify-end">
-                      <div className="text-right">
-                        <p className="whitespace-nowrap text-base font-black text-slate-950">{formatKrw(holding.marketValue)}</p>
-                        <p className={cn("mt-1 text-sm font-black", holding.profitLoss >= 0 ? "text-red-500" : "text-blue-500")}>
+                    <div className="flex min-w-0 items-center justify-between gap-3 md:justify-end">
+                      <div className="min-w-0 text-right">
+                        <p className="numeric max-w-full overflow-hidden text-ellipsis text-base font-black text-slate-950">{formatKrw(holding.marketValue)}</p>
+                        <p className={cn("numeric mt-1 max-w-full overflow-hidden text-ellipsis text-sm font-black", holding.profitLoss >= 0 ? "text-red-500" : "text-blue-500")}>
                           {formatSignedKrw(holding.profitLoss)} ({formatPercent(holding.profitLossRate)})
                         </p>
                       </div>
@@ -1596,26 +1657,26 @@ function AccountBreakdown({ holding }: { holding: AggregatedHolding }) {
       <div className="grid gap-2 xl:grid-cols-2">
         {holding.accounts.map((account) => (
           <div key={account.id} className="rounded-lg bg-white p-3 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
                 <p className="text-sm font-black text-slate-950">{account.accountAlias}</p>
                 <p className="mt-1 text-xs font-semibold text-slate-500">
                   {brokerLabels[account.broker]} · {accountTypeLabel(account.accountType)}
                 </p>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-black text-slate-950">{formatQuantity(account.quantity)}주</p>
-                <p className="mt-1 text-xs font-bold text-slate-500">{account.weightWithinHolding.toFixed(1)}%</p>
+              <div className="shrink-0 text-right">
+                <p className="numeric text-sm font-black text-slate-950">{formatQuantity(account.quantity)}주</p>
+                <p className="numeric mt-1 text-xs font-bold text-slate-500">{account.weightWithinHolding.toFixed(1)}%</p>
               </div>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
               <div>
                 <p className="font-semibold text-slate-400">평가금액</p>
-                <p className="mt-1 font-black text-slate-900">{formatKrw(account.marketValue)}</p>
+                <p className="numeric mt-1 overflow-hidden text-ellipsis font-black text-slate-900">{formatKrw(account.marketValue)}</p>
               </div>
               <div className="text-right">
                 <p className="font-semibold text-slate-400">손익</p>
-                <p className={cn("mt-1 font-black", account.profitLoss >= 0 ? "text-red-500" : "text-blue-500")}>
+                <p className={cn("numeric mt-1 overflow-hidden text-ellipsis font-black", account.profitLoss >= 0 ? "text-red-500" : "text-blue-500")}>
                   {formatSignedKrw(account.profitLoss)}
                 </p>
               </div>
@@ -1640,11 +1701,15 @@ const tossHoldingSortOptions: Array<{ value: TossHoldingSortKey; label: string }
 
 type TossHoldingRow = {
   key: string;
+  securityId: string;
   symbol: string;
   name: string;
   marketCountry: string;
   currency: string;
   assetType: string;
+  logoUrl: string | null;
+  companyDomain: string | null;
+  logoSource: string;
   totalQuantity: number;
   averagePurchasePrice: number;
   marketPrice: number;
@@ -1705,21 +1770,21 @@ function TossStyleHoldingsList({
   }, [rows, selectedKey]);
 
   return (
-    <section className="overflow-hidden rounded-2xl bg-[#080a10] text-white shadow-soft">
-      <div className="border-b border-white/10 px-4 py-5 sm:px-6">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <p className="text-sm font-black text-slate-300">{title}</p>
-            <p className="mt-2 text-3xl font-black tracking-tight text-white">{formatKrw(metrics.totalMarketValue)}</p>
-            <p className={cn("mt-1 text-sm font-black", profitTone)}>
+    <section className="holding-list-shell min-w-0 overflow-hidden rounded-[18px]">
+      <div className="border-b border-[var(--card-border)] px-4 py-5 sm:px-6">
+        <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0 overflow-hidden">
+            <p className="text-sm font-black text-[var(--text-secondary)]">{title}</p>
+            <p className="numeric mt-2 max-w-full overflow-hidden text-ellipsis text-3xl font-black text-[var(--text-primary)]">{formatKrw(metrics.totalMarketValue)}</p>
+            <p className={cn("numeric mt-1 max-w-full overflow-hidden text-ellipsis text-sm font-black", profitTone)}>
               {formatSignedKrw(metrics.totalProfitLoss)} ({formatPercent(metrics.returnRate)})
             </p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-[minmax(220px,1fr)_auto] xl:min-w-[520px]">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(220px,1fr)_auto] xl:w-[520px] xl:shrink-0">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <Input
-                className="h-10 border-white/10 bg-white/5 pl-9 text-sm font-semibold text-white placeholder:text-slate-500 focus:border-blue-500"
+                className="h-10 pl-9 text-sm font-semibold"
                 value={searchText}
                 placeholder="종목명 또는 티커 검색"
                 onChange={(event) => setSearchText(event.target.value)}
@@ -1727,22 +1792,22 @@ function TossStyleHoldingsList({
             </label>
             <select
               aria-label="보유종목 정렬"
-              className="h-10 rounded-lg border border-white/10 bg-white/5 px-3 text-sm font-black text-white outline-none transition focus:border-blue-500"
+              className="h-10 rounded-lg border border-[var(--card-border)] bg-[var(--surface)] px-3 text-sm font-black text-[var(--text-primary)] outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               value={sortKey}
               onChange={(event) => setSortKey(event.target.value as TossHoldingSortKey)}
             >
               {tossHoldingSortOptions.map((option) => (
-                <option key={option.value} value={option.value} className="bg-[#12141c] text-white">
+                <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
             </select>
-            <div className="flex rounded-lg bg-white/10 p-1 sm:col-start-2">
+            <div className="flex rounded-lg bg-[var(--surface-subtle)] p-1 sm:col-start-2">
               <button
                 type="button"
                 className={cn(
                   "h-8 rounded-md px-3 text-xs font-black transition",
-                  valueMode === "price" ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10"
+                  valueMode === "price" ? "bg-white text-slate-950 shadow-sm dark:bg-white/10 dark:text-white" : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
                 )}
                 onClick={() => setValueMode("price")}
               >
@@ -1752,7 +1817,7 @@ function TossStyleHoldingsList({
                 type="button"
                 className={cn(
                   "h-8 rounded-md px-3 text-xs font-black transition",
-                  valueMode === "value" ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10"
+                  valueMode === "value" ? "bg-white text-slate-950 shadow-sm dark:bg-white/10 dark:text-white" : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
                 )}
                 onClick={() => setValueMode("value")}
               >
@@ -1763,7 +1828,7 @@ function TossStyleHoldingsList({
         </div>
       </div>
 
-      <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid min-w-0 gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_340px] min-[1536px]:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0">
           {rows.length === 0 ? (
             <TossHoldingEmpty />
@@ -1856,30 +1921,35 @@ function TossHoldingRowButton({
     <button
       type="button"
       className={cn(
-        "group flex min-h-[72px] w-full items-center justify-between gap-3 rounded-xl px-2 py-2 text-left transition",
-        selected ? "bg-white/[0.09]" : "hover:bg-white/[0.06]"
+        "holding-row group flex min-h-[72px] w-full min-w-0 items-center justify-between gap-3 overflow-hidden rounded-xl px-2 py-2 text-left transition",
+        selected ? "holding-row-selected" : "hover:bg-[var(--surface-hover)]"
       )}
       onClick={() => onSelect(holding.key)}
     >
       <div className="flex min-w-0 items-center gap-3">
-        <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-black shadow-sm", holdingIconClass(holding.symbol))}>
-          {holdingIconText(holding.symbol)}
-        </span>
+        <SecurityLogo
+          symbol={holding.symbol}
+          name={holding.name}
+          logoUrl={holding.logoUrl}
+          marketCountry={holding.marketCountry}
+          size="sm"
+          showCountryBadge
+        />
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5">
-            <p className="truncate text-base font-black text-white">{displayName}</p>
+            <p className="truncate text-base font-black text-[var(--text-primary)]">{displayName}</p>
             <span className="text-xs leading-none">{marketCountryFlag(holding)}</span>
             {holding.accountCount > 1 ? (
-              <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-black text-slate-300">{holding.accountCount}계좌</span>
+              <span className="rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 text-[10px] font-black text-[var(--text-secondary)]">{holding.accountCount}계좌</span>
             ) : null}
           </div>
           <p className="mt-0.5 truncate text-xs font-bold text-slate-400">{holding.symbol}</p>
-          <p className="mt-0.5 text-xs font-semibold text-slate-400">{formatQuantity(holding.totalQuantity)}주</p>
+          <p className="numeric mt-0.5 text-xs font-semibold text-slate-400">{formatQuantity(holding.totalQuantity)}주</p>
           <HoldingStickerStrip drawdownCount={drawdownStickerCount} burgerCount={burgerStickerCount} rate={holding.profitLossRate} />
           {showBrokerBadges ? (
             <div className="mt-1 flex max-w-[360px] flex-wrap gap-1">
               {holding.brokerBreakdown.map((item) => (
-                <span key={item.broker} className="rounded bg-white/[0.07] px-1.5 py-0.5 text-[10px] font-bold text-slate-300">
+                <span key={item.broker} className="rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--text-secondary)]">
                   {brokerShortLabel(item.broker)} {formatQuantity(item.quantity)}주
                 </span>
               ))}
@@ -1887,13 +1957,13 @@ function TossHoldingRowButton({
           ) : null}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <div className="text-right">
-          <p className="whitespace-nowrap text-base font-black text-white">{displayValue}</p>
-          <p className={cn("mt-0.5 whitespace-nowrap text-xs font-black", profitColor)}>
+      <div className="flex w-[178px] shrink-0 items-center justify-end gap-1.5 overflow-hidden">
+        <div className="min-w-0 text-right">
+          <p className="numeric max-w-full overflow-hidden text-ellipsis text-base font-black text-[var(--text-primary)]">{displayValue}</p>
+          <p className={cn("numeric mt-0.5 max-w-full overflow-hidden text-ellipsis text-xs font-black", profitColor)}>
             {formatSignedKrw(holding.profitLoss)} ({formatPercent(holding.profitLossRate)})
           </p>
-          <p className="mt-0.5 text-[10px] font-bold text-slate-500">비중 {holding.portfolioWeight.toFixed(1)}%</p>
+          <p className="numeric mt-0.5 text-[10px] font-bold text-slate-500">비중 {holding.portfolioWeight.toFixed(1)}%</p>
         </div>
         <ChevronRight className={cn("h-4 w-4 text-slate-600 transition group-hover:text-slate-300", selected && "text-slate-300")} />
       </div>
@@ -1904,10 +1974,10 @@ function TossHoldingRowButton({
 function TossHoldingDetailPanel({ holding, onClear }: { holding: TossHoldingRow | null; onClear: () => void }) {
   if (!holding) {
     return (
-      <aside className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-slate-300 xl:sticky xl:top-5">
+      <aside className="rounded-2xl border border-[var(--card-border)] bg-[var(--surface)] p-5 text-[var(--text-secondary)] xl:sticky xl:top-5">
         <div className="flex h-full min-h-[260px] flex-col items-center justify-center text-center">
           <Info className="h-9 w-9 text-slate-600" />
-          <p className="mt-3 text-sm font-black text-white">종목을 선택하세요</p>
+          <p className="mt-3 text-sm font-black text-[var(--text-primary)]">종목을 선택하세요</p>
           <p className="mt-1 text-xs font-semibold text-slate-500">보유수량, 평균단가, 계좌별 분해를 오른쪽에서 확인할 수 있습니다.</p>
         </div>
       </aside>
@@ -1920,14 +1990,19 @@ function TossHoldingDetailPanel({ holding, onClear }: { holding: TossHoldingRow 
   const burgerStickerCount = getBurgerStickerCount(holding.profitLossRate);
 
   return (
-    <aside className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 xl:sticky xl:top-5">
+    <aside className="min-w-0 overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--surface)] p-5 xl:sticky xl:top-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xs font-black shadow-sm", holdingIconClass(holding.symbol))}>
-            {holdingIconText(holding.symbol)}
-          </span>
+          <SecurityLogo
+            symbol={holding.symbol}
+            name={holding.name}
+            logoUrl={holding.logoUrl}
+            marketCountry={holding.marketCountry}
+            size="lg"
+            showCountryBadge
+          />
           <div className="min-w-0">
-            <p className="truncate text-lg font-black text-white">
+            <p className="truncate text-lg font-black text-[var(--text-primary)]">
               {displayName} <span className="text-sm">{marketCountryFlag(holding)}</span>
             </p>
             <p className="truncate text-xs font-bold text-slate-400">{holding.symbol}</p>
@@ -1961,31 +2036,31 @@ function TossHoldingDetailPanel({ holding, onClear }: { holding: TossHoldingRow 
           {holding.accounts.map((account) => {
             const accountProfitColor = account.profitLoss >= 0 ? "text-[#ff3b4e]" : "text-[#2f7dff]";
             return (
-              <div key={account.id} className="rounded-xl bg-white/[0.06] p-3">
+              <div key={account.id} className="rounded-xl bg-[var(--surface-subtle)] p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-black text-white">{cleanDisplayName(account.accountAlias)}</p>
+                    <p className="truncate text-sm font-black text-[var(--text-primary)]">{cleanDisplayName(account.accountAlias)}</p>
                     <p className="mt-0.5 text-xs font-semibold text-slate-500">
                       {brokerShortLabel(account.broker)} · {accountTypeLabel(account.accountType)}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-black text-white">{formatQuantity(account.quantity)}주</p>
-                    <p className="text-[10px] font-bold text-slate-500">{account.weightWithinHolding.toFixed(1)}%</p>
+                  <div className="shrink-0 text-right">
+                    <p className="numeric text-sm font-black text-[var(--text-primary)]">{formatQuantity(account.quantity)}주</p>
+                    <p className="numeric text-[10px] font-bold text-slate-500">{account.weightWithinHolding.toFixed(1)}%</p>
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                   <div>
                     <p className="font-semibold text-slate-500">현재가</p>
-                    <p className="mt-1 font-black text-slate-200">{formatHoldingPrice(account.marketPrice, holding.currency)}</p>
+                    <p className="numeric mt-1 overflow-hidden text-ellipsis font-black text-[var(--text-primary)]">{formatHoldingPrice(account.marketPrice, holding.currency)}</p>
                   </div>
                   <div>
                     <p className="font-semibold text-slate-500">평가금</p>
-                    <p className="mt-1 font-black text-slate-200">{formatKrw(account.marketValue)}</p>
+                    <p className="numeric mt-1 overflow-hidden text-ellipsis font-black text-[var(--text-primary)]">{formatKrw(account.marketValue)}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-slate-500">손익</p>
-                    <p className={cn("mt-1 font-black", accountProfitColor)}>{formatSignedKrw(account.profitLoss)}</p>
+                    <p className={cn("numeric mt-1 overflow-hidden text-ellipsis font-black", accountProfitColor)}>{formatSignedKrw(account.profitLoss)}</p>
                   </div>
                 </div>
               </div>
@@ -1999,18 +2074,18 @@ function TossHoldingDetailPanel({ holding, onClear }: { holding: TossHoldingRow 
 
 function DetailMetric({ label, value, valueClassName }: { label: string; value: string; valueClassName?: string }) {
   return (
-    <div className="rounded-xl bg-white/[0.06] p-3">
+    <div className="min-w-0 overflow-hidden rounded-xl bg-[var(--surface-subtle)] p-3">
       <p className="text-[11px] font-bold text-slate-500">{label}</p>
-      <p className={cn("mt-1 truncate text-sm font-black text-white", valueClassName)}>{value}</p>
+      <p className={cn("numeric mt-1 truncate text-sm font-black text-[var(--text-primary)]", valueClassName)}>{value}</p>
     </div>
   );
 }
 
 function TossHoldingEmpty() {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center">
+    <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--surface)] p-8 text-center">
       <Search className="mx-auto h-8 w-8 text-slate-600" />
-      <p className="mt-3 text-sm font-black text-white">검색 결과가 없습니다</p>
+      <p className="mt-3 text-sm font-black text-[var(--text-primary)]">검색 결과가 없습니다</p>
       <p className="mt-1 text-xs font-semibold text-slate-500">다른 종목명이나 티커로 다시 검색해보세요.</p>
     </div>
   );
@@ -2022,33 +2097,41 @@ function TopHoldings({ data }: { data: PortfolioSummary }) {
   return (
     <Card className="min-h-[326px]">
       <CardHeader className="block">
-        <div className="flex w-full items-start justify-between gap-3">
-          <CardTitle className="whitespace-nowrap text-[19px]">상위 보유 종목 TOP 5</CardTitle>
-          <div className="flex shrink-0 rounded-lg bg-white/[0.05] p-1 text-[11px] text-[#94A3B8]">
-            <button className="rounded-md bg-white/[0.08] px-2.5 py-1 text-white" onClick={() => alert("전체 보유종목 필터를 선택했습니다.")}>전체</button>
-            <button className="px-2.5 py-1 transition hover:text-white" onClick={() => alert("국내 주식 필터는 보유종목 상세 화면에서 확장됩니다.")}>국내 주식</button>
-            <button className="px-2.5 py-1 transition hover:text-white" onClick={() => alert("해외 주식 필터는 보유종목 상세 화면에서 확장됩니다.")}>해외 주식</button>
+        <div className="flex min-w-0 w-full items-start justify-between gap-3">
+          <CardTitle className="min-w-0 truncate text-[19px]">상위 보유 종목 TOP 5</CardTitle>
+          <div className="flex shrink-0 rounded-lg bg-[var(--surface-subtle)] p-1 text-[11px] text-[var(--text-secondary)]">
+            <button className="rounded-md bg-white px-2.5 py-1 text-[var(--text-primary)] shadow-sm dark:bg-white/[0.10] dark:text-white" onClick={() => alert("전체 보유종목 필터를 선택했습니다.")}>전체</button>
+            <button className="px-2.5 py-1 transition hover:text-[var(--text-primary)]" onClick={() => alert("국내 주식 필터는 보유종목 상세 화면에서 확장됩니다.")}>국내 주식</button>
+            <button className="px-2.5 py-1 transition hover:text-[var(--text-primary)]" onClick={() => alert("해외 주식 필터는 보유종목 상세 화면에서 확장됩니다.")}>해외 주식</button>
           </div>
         </div>
       </CardHeader>
       <CardContent className="pt-1">
         <div className="space-y-1">
           {data.topHoldings.map((holding, index) => (
-            <div key={holding.id} className="grid h-10 grid-cols-[22px_1fr_auto_auto] items-center gap-3 rounded-lg px-1 text-[13px] transition hover:bg-white/[0.04]">
-              <p className="text-center text-[12px] font-normal text-[#94A3B8]">{index + 1}</p>
+            <div key={holding.id} className="grid h-11 min-w-0 grid-cols-[22px_32px_minmax(0,1fr)_50px_118px] items-center gap-3 overflow-hidden rounded-lg px-1 text-[13px] transition hover:bg-[var(--surface-hover)]">
+              <p className="text-center text-[12px] font-normal text-[var(--text-muted)]">{index + 1}</p>
+              <SecurityLogo
+                symbol={holding.symbol}
+                name={holding.name}
+                logoUrl={holding.logoUrl}
+                marketCountry={holding.marketCountry}
+                size="sm"
+                showCountryBadge
+              />
               <div className="min-w-0">
-                <p className="truncate font-semibold text-white">{holding.symbol}</p>
-                <p className="truncate text-[10px] font-normal text-[#94A3B8]">{holding.name}</p>
+                <p className="truncate font-semibold text-[var(--text-primary)]">{holding.symbol}</p>
+                <p className="truncate text-[10px] font-normal text-[var(--text-secondary)]">{holding.name}</p>
               </div>
-              <p className="whitespace-nowrap text-right text-[12px] font-normal text-[#94A3B8]">{((safeNumber(holding.marketValue) / totalMarketValue) * 100).toFixed(2)}%</p>
-              <div className="text-right">
-                <p className="whitespace-nowrap font-semibold text-slate-100">{formatKrw(holding.marketValue)}</p>
-                <p className={cn("mt-0.5 text-[11px] font-semibold", holding.profitLossRate >= 0 ? "text-[#EF4444]" : "text-[#3B82F6]")}>{formatPercent(holding.profitLossRate)}</p>
+              <p className="numeric overflow-hidden text-ellipsis text-right text-[12px] font-normal text-[var(--text-secondary)]">{((safeNumber(holding.marketValue) / totalMarketValue) * 100).toFixed(2)}%</p>
+              <div className="min-w-0 text-right">
+                <p className="numeric overflow-hidden text-ellipsis font-semibold text-[var(--text-primary)]">{formatKrw(holding.marketValue)}</p>
+                <p className={cn("numeric mt-0.5 overflow-hidden text-ellipsis text-[11px] font-semibold", holding.profitLossRate >= 0 ? "text-[#EF4444]" : "text-[#3B82F6]")}>{formatPercent(holding.profitLossRate)}</p>
               </div>
             </div>
           ))}
         </div>
-        <Button className="mt-4 h-10 w-full rounded-xl bg-white/[0.05] text-[13px] font-medium hover:bg-[#12203A]" variant="dark" onClick={() => alert("전체 종목 리스트는 계좌별 상세 화면에서 확인할 수 있습니다.")}>
+        <Button className="mt-4 h-10 w-full rounded-xl text-[13px] font-medium" variant="dark" onClick={() => alert("전체 종목 리스트는 계좌별 상세 화면에서 확인할 수 있습니다.")}>
           전체 종목 보기 <ChevronRight className="h-4 w-4" />
         </Button>
       </CardContent>
@@ -2074,25 +2157,30 @@ function DuplicateHoldings({ data }: { data: PortfolioSummary }) {
         ) : (
         <div className="space-y-2">
           {data.duplicateHoldings.map((item) => (
-            <div key={item.symbol} className="rounded-xl bg-white/[0.035] p-3 transition hover:bg-white/[0.055]">
+            <div key={item.symbol} className="rounded-xl bg-[var(--surface-subtle)] p-3 transition hover:bg-[var(--surface-hover)]">
               <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-[12px] font-semibold text-blue-200">
-                  {item.symbol.slice(0, 2)}
-                </div>
+                <SecurityLogo
+                  symbol={item.symbol}
+                  name={item.name}
+                  logoUrl={item.logoUrl}
+                  marketCountry={item.marketCountry}
+                  size="sm"
+                  showCountryBadge
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-[14px] font-semibold text-white">{item.symbol}</p>
-                      <p className="truncate text-[11px] font-normal text-[#94A3B8]">{item.name}</p>
+                      <p className="truncate text-[14px] font-semibold text-[var(--text-primary)]">{item.symbol}</p>
+                      <p className="truncate text-[11px] font-normal text-[var(--text-secondary)]">{item.name}</p>
                     </div>
                     <div className="text-right text-[13px]">
-                      <p className="font-semibold text-slate-100">{formatQuantity(item.totalQuantity)}주</p>
+                      <p className="font-semibold text-[var(--text-primary)]">{formatQuantity(item.totalQuantity)}주</p>
                       <p className="mt-1 text-[11px] font-medium text-blue-300">{item.accounts.length}개 계좌</p>
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {item.accounts.map((account) => (
-                      <span key={`${item.symbol}-${account}`} className="rounded-md bg-white/[0.07] px-2 py-0.5 text-[11px] font-normal text-slate-300">
+                      <span key={`${item.symbol}-${account}`} className="rounded-md bg-white px-2 py-0.5 text-[11px] font-normal text-[var(--text-secondary)] shadow-sm dark:bg-white/[0.08]">
                         {account}
                       </span>
                     ))}
@@ -2103,7 +2191,7 @@ function DuplicateHoldings({ data }: { data: PortfolioSummary }) {
           ))}
         </div>
         )}
-        <Button className="mt-4 h-10 w-full rounded-xl bg-white/[0.05] text-[13px] font-medium hover:bg-[#12203A]" variant="dark" onClick={() => alert("중복 보유 정리 워크플로우는 리밸런싱 화면에서 진행합니다.")}>
+        <Button className="mt-4 h-10 w-full rounded-xl text-[13px] font-medium" variant="dark" onClick={() => alert("중복 보유 정리 워크플로우는 리밸런싱 화면에서 진행합니다.")}>
           전체 중복 종목 보기 <ChevronRight className="h-4 w-4" />
         </Button>
       </CardContent>
@@ -2121,31 +2209,31 @@ function AiInsightCard({ data, onNavigate }: { data: PortfolioSummary; onNavigat
         <button className="text-[12px] font-medium text-[#3B82F6] transition hover:text-blue-200" onClick={() => onNavigate("ai")}>AI 상세 분석</button>
       </CardHeader>
       <CardContent className="pt-1">
-        <div className="rounded-xl bg-white/[0.035] p-4">
+        <div className="rounded-xl bg-[var(--surface-subtle)] p-4">
           <ul className="space-y-2">
           {data.aiInsights.map((insight) => {
             return (
               <li key={insight.title} className="flex gap-3 text-[13px] leading-6">
                 <span className={cn("mt-2 h-1.5 w-1.5 shrink-0 rounded-full", insight.type === "warning" && "bg-orange-300", insight.type === "info" && "bg-blue-300", insight.type === "success" && "bg-emerald-300")} />
                 <span>
-                  <span className="font-medium text-slate-100">{insight.title}</span>
-                  <span className="ml-1 text-slate-400">{insight.description}</span>
+                  <span className="font-medium text-[var(--text-primary)]">{insight.title}</span>
+                  <span className="ml-1 text-[var(--text-secondary)]">{insight.description}</span>
                 </span>
               </li>
             );
           })}
           </ul>
         </div>
-        <div className="mt-3 rounded-xl border border-white/[0.05] bg-white/[0.035] p-3">
+        <div className="mt-3 rounded-xl border border-[var(--card-border)] bg-[var(--surface-subtle)] p-3">
           <div className="flex items-end justify-between">
-            <p className="text-[13px] font-medium text-[#94A3B8]">포트폴리오 점수</p>
-            <p className="text-[28px] font-semibold leading-none text-white">85<span className="text-[13px] font-normal text-[#94A3B8]"> /100</span></p>
+            <p className="text-[13px] font-medium text-[var(--text-secondary)]">포트폴리오 점수</p>
+            <p className="text-[28px] font-semibold leading-none text-[var(--text-primary)]">85<span className="text-[13px] font-normal text-[var(--text-secondary)]"> /100</span></p>
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.08]">
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
             <div className="h-full w-[85%] rounded-full bg-gradient-to-r from-[#3B82F6] to-[#60A5FA]" />
           </div>
         </div>
-        <Button className="mt-3 h-10 w-full rounded-xl bg-white/[0.05] text-[13px] font-medium hover:bg-[#12203A]" variant="dark" onClick={() => onNavigate("ai")}>
+        <Button className="mt-3 h-10 w-full rounded-xl text-[13px] font-medium" variant="dark" onClick={() => onNavigate("ai")}>
           AI 리포트 전체 보기
         </Button>
       </CardContent>
@@ -2155,47 +2243,47 @@ function AiInsightCard({ data, onNavigate }: { data: PortfolioSummary; onNavigat
 
 function BottomActionPanel({ data, onNavigate }: { data: PortfolioSummary; onNavigate: (view: ViewKey) => void }) {
   return (
-    <section className="grid gap-5 rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(16,26,44,0.96),rgba(8,17,32,0.96))] p-6 text-white shadow-[0_24px_70px_rgba(0,0,0,0.28)] xl:grid-cols-4">
+    <section className="hero-card grid gap-5 rounded-[24px] p-6 xl:grid-cols-4">
       <div>
-        <p className="text-lg font-black">리밸런싱 추천</p>
-        <p className="mt-3 text-sm text-blue-100">자산 배분을 최적화하면</p>
-        <p className="mt-1 text-lg font-black text-emerald-300">연간 +1,250,000원 추가 수익이</p>
-        <p className="text-sm text-blue-100">예상됩니다.</p>
+        <p className="text-lg font-black text-[var(--text-primary)]">리밸런싱 추천</p>
+        <p className="mt-3 text-sm text-[var(--text-secondary)]">자산 배분을 최적화하면</p>
+        <p className="mt-1 text-lg font-black text-emerald-600 dark:text-emerald-300">연간 +1,250,000원 추가 수익이</p>
+        <p className="text-sm text-[var(--text-secondary)]">예상됩니다.</p>
         <Button className="mt-4" variant="dark" onClick={() => onNavigate("rebalance")}>상세 보기</Button>
       </div>
-      <div className="border-white/10 xl:border-l xl:pl-6">
-        <p className="text-lg font-black">세금 예상 <span className="text-xs text-blue-200">(올해 양도소득세)</span></p>
+      <div className="border-[var(--card-border)] xl:border-l xl:pl-6">
+        <p className="text-lg font-black text-[var(--text-primary)]">세금 예상 <span className="text-xs text-[var(--text-secondary)]">(올해 양도소득세)</span></p>
         <div className="mt-5 grid grid-cols-2 gap-4">
           <div>
-            <p className="text-sm text-blue-100">예상 과세 대상 금액</p>
-            <p className="mt-1 text-lg font-black">12,450,000원</p>
+            <p className="text-sm text-[var(--text-secondary)]">예상 과세 대상 금액</p>
+            <p className="mt-1 text-lg font-black text-[var(--text-primary)]">12,450,000원</p>
           </div>
           <div>
-            <p className="text-sm text-blue-100">예상 세금</p>
-            <p className="mt-1 text-lg font-black">1,990,000원</p>
+            <p className="text-sm text-[var(--text-secondary)]">예상 세금</p>
+            <p className="mt-1 text-lg font-black text-[var(--text-primary)]">1,990,000원</p>
           </div>
         </div>
         <Button className="mt-4" variant="dark" onClick={() => onNavigate("tax")}>상세 보기</Button>
       </div>
-      <div className="border-white/10 xl:border-l xl:pl-6">
-        <p className="text-lg font-black">ISA/연금 최적화</p>
+      <div className="border-[var(--card-border)] xl:border-l xl:pl-6">
+        <p className="text-lg font-black text-[var(--text-primary)]">ISA/연금 최적화</p>
         <div className="mt-4 flex items-center gap-5">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-blue-400 text-lg font-black">78%</div>
+          <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-blue-400 text-lg font-black text-[var(--text-primary)]">78%</div>
           <div>
-            <p className="text-sm text-blue-100">절세 한도 활용률</p>
-            <p className="mt-1 text-lg font-black">추가 납입 가능 금액<br />2,450,000원</p>
+            <p className="text-sm text-[var(--text-secondary)]">절세 한도 활용률</p>
+            <p className="mt-1 text-lg font-black text-[var(--text-primary)]">추가 납입 가능 금액<br />2,450,000원</p>
           </div>
         </div>
         <Button className="mt-4" variant="dark" onClick={() => onNavigate("settings")}>상세 보기</Button>
       </div>
-      <div className="border-white/10 xl:border-l xl:pl-6">
-        <p className="text-lg font-black">다음 배당 예정</p>
+      <div className="border-[var(--card-border)] xl:border-l xl:pl-6">
+        <p className="text-lg font-black text-[var(--text-primary)]">다음 배당 예정</p>
         <div className="mt-5 flex gap-4">
           <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-red-400 text-xl font-black text-red-400">D-7</div>
           <div>
-            <p className="font-black">SCHD</p>
-            <p className="text-sm text-blue-100">예상 배당금 {formatKrw(Math.min(156000, data.metrics.annualDividendEstimate))}</p>
-            <p className="text-sm text-blue-100">2024.05.27 입금 예정</p>
+            <p className="font-black text-[var(--text-primary)]">SCHD</p>
+            <p className="text-sm text-[var(--text-secondary)]">예상 배당금 {formatKrw(Math.min(156000, data.metrics.annualDividendEstimate))}</p>
+            <p className="text-sm text-[var(--text-secondary)]">2024.05.27 입금 예정</p>
           </div>
         </div>
         <Button className="mt-4" variant="dark" onClick={() => onNavigate("dividend")}>전체 배당 캘린더</Button>
@@ -2339,7 +2427,7 @@ function BrokerView({ broker, token, onNavigate }: { broker: BrokerKey; token: s
     <div className="space-y-4">
       <section className="grid gap-4 lg:grid-cols-4">
         <KpiCard icon={Wallet} label="평가금액" value={formatKrw(data.metrics.totalMarketValue)} caption={brokerLabels[broker]} tone="blue" />
-        <KpiCard icon={LineChart} label="손익" value={formatKrw(data.metrics.totalProfitLoss)} caption={formatPercent(data.metrics.returnRate)} tone="red" />
+        <KpiCard icon={LineChartIcon} label="손익" value={formatKrw(data.metrics.totalProfitLoss)} caption={formatPercent(data.metrics.returnRate)} tone="red" />
         <KpiCard icon={Gift} label="연간 배당 예상" value={formatKrw(data.metrics.annualDividendEstimate)} caption="입력/추정 기준" tone="purple" />
         <KpiCard icon={Globe2} label="환율 노출도" value={`${data.metrics.fxExposureRate.toFixed(1)}%`} caption="USD 기준" tone="green" />
       </section>
@@ -4253,11 +4341,15 @@ function buildAggregatedHoldings(data: PortfolioSummary, searchText: string, sor
       grouped.get(key) ??
       ({
         key,
+        securityId: holding.securityId,
         symbol: holding.symbol,
         name: holding.name,
         marketCountry: holding.marketCountry,
         currency: holding.currency,
         assetType: holding.assetType,
+        logoUrl: holding.logoUrl,
+        companyDomain: holding.companyDomain,
+        logoSource: holding.logoSource,
         totalQuantity: 0,
         marketValue: 0,
         costAmount: 0,
@@ -4333,11 +4425,15 @@ function buildTossHoldingRows(holdings: Holding[], totalMarketValue: number, sea
       grouped.get(key) ??
       ({
         key,
+        securityId: holding.securityId,
         symbol: holding.symbol,
         name: holding.name,
         marketCountry: holding.marketCountry,
         currency: holding.currency,
         assetType: holding.assetType,
+        logoUrl: holding.logoUrl,
+        companyDomain: holding.companyDomain,
+        logoSource: holding.logoSource,
         totalQuantity: 0,
         averagePurchasePrice: 0,
         marketPrice: 0,
@@ -4459,11 +4555,15 @@ function HoldingStickerStrip({
   size?: "sm" | "md";
 }) {
   if (drawdownCount <= 0 && burgerCount <= 0) return null;
-  const stickerSizeClass = size === "md" ? "h-7 w-7" : "h-5 w-5";
+  const stickerSizeClass = size === "md" ? "h-9 w-9 rounded-lg" : "h-7 w-7 rounded-md";
+  const stripClassName =
+    size === "md"
+      ? "mt-2 flex max-w-[280px] flex-wrap items-center gap-1.5 rounded-xl bg-black/20 p-1.5"
+      : "mt-1.5 flex max-w-[240px] flex-wrap items-center gap-1 rounded-lg bg-black/20 p-1";
 
   return (
     <div
-      className="mt-1 flex max-w-[190px] flex-wrap items-center gap-0.5"
+      className={stripClassName}
       aria-label={`수익률 ${formatPercent(rate)} 기준 사람 스티커 ${drawdownCount}개, 햄버거 스티커 ${burgerCount}개`}
       title={`손실 -5%당 사람 1개 · 수익 +100%당 햄버거 1개`}
     >
@@ -4472,7 +4572,7 @@ function HoldingStickerStrip({
           key={`drawdown-${drawdownCount}-${index}`}
           src="/drawdown-mao-sticker.png"
           alt=""
-          className={cn("shrink-0 rounded-[3px] object-contain drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]", stickerSizeClass)}
+          className={cn("shrink-0 border border-white/15 bg-white/10 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.50)]", stickerSizeClass)}
         />
       ))}
       {Array.from({ length: burgerCount }).map((_, index) => (
@@ -4480,7 +4580,7 @@ function HoldingStickerStrip({
           key={`burger-${burgerCount}-${index}`}
           src="/profit-hamburger-sticker.png"
           alt=""
-          className={cn("shrink-0 rounded-[3px] object-contain drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]", stickerSizeClass)}
+          className={cn("shrink-0 border border-white/15 bg-white/10 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.50)]", stickerSizeClass)}
         />
       ))}
     </div>
@@ -4500,26 +4600,6 @@ function brokerShortLabel(broker: BrokerKey) {
     KIWOOM: "키움"
   };
   return labels[broker];
-}
-
-function holdingIconText(symbol: string) {
-  const clean = symbol.replace(/[^A-Z0-9]/gi, "").toUpperCase();
-  return clean.length <= 2 ? clean : clean.slice(0, 2);
-}
-
-function holdingIconClass(symbol: string) {
-  const classes = [
-    "bg-[#78d600] text-white",
-    "bg-[#1f6bff] text-white",
-    "bg-[#64748b] text-white",
-    "bg-[#14b8a6] text-white",
-    "bg-[#ff334b] text-white",
-    "bg-[#111827] text-white",
-    "bg-[#2563eb] text-white",
-    "bg-[#16a34a] text-white"
-  ];
-  const seed = symbol.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return classes[seed % classes.length];
 }
 
 function formatHoldingPrice(value: number, currency: string) {
@@ -4637,4 +4717,3 @@ function formatInterval(value?: number) {
   if (value < 60_000) return `${Math.round(value / 1000)}초`;
   return `${Math.round(value / 60_000)}분`;
 }
-

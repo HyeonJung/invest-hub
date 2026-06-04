@@ -6,6 +6,7 @@ import { PortfolioModule } from "./portfolio/portfolio.module";
 import { PricesModule } from "./prices/prices.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RebalanceModule } from "./rebalance/rebalance.module";
+import { SecuritiesModule } from "./securities/securities.module";
 import { SettingsModule } from "./settings/settings.module";
 import { UploadsModule } from "./uploads/uploads.module";
 
@@ -19,6 +20,7 @@ import { UploadsModule } from "./uploads/uploads.module";
     PricesModule,
     UploadsModule,
     RebalanceModule,
+    SecuritiesModule,
     SettingsModule
   ]
 })

@@ -47,6 +47,13 @@ export const api = {
     request<MarketIndicatorsResult>("/api/market-indicators/refresh", {
       method: "POST"
     }),
+  securityLogo: (securityId: string, token?: string | null) =>
+    request<SecurityLogoResult>(`/api/securities/${securityId}/logo`, { token }),
+  refreshSecurityLogo: (securityId: string, token?: string | null) =>
+    request<SecurityLogoResult>(`/api/securities/${securityId}/logo/refresh`, {
+      method: "POST",
+      token
+    }),
   syncToss: (payload: { accountId?: string; clientId?: string; clientSecret?: string }, token: string | null) =>
     request<{ accounts: number; saved: number }>("/brokers/toss/sync", {
       method: "POST",
@@ -195,6 +202,7 @@ export type ChartDatum = {
 
 export type Holding = {
   id: string;
+  securityId: string;
   broker: BrokerKey;
   accountAlias: string;
   accountType: string;
@@ -203,6 +211,9 @@ export type Holding = {
   marketCountry: string;
   currency: string;
   assetType: string;
+  logoUrl: string | null;
+  companyDomain: string | null;
+  logoSource: "MANUAL" | "FINNHUB" | "LOGO_DEV" | "BRANDFETCH" | "FALLBACK" | string;
   quantity: number;
   averagePurchasePrice: number;
   marketPrice: number;
@@ -213,6 +224,18 @@ export type Holding = {
   annualDividendEstimate: number;
 };
 
+export type SecurityLogoResult = {
+  securityId: string | null;
+  symbol: string;
+  name: string;
+  marketCountry: string;
+  logoUrl: string | null;
+  companyDomain: string | null;
+  logoSource: "MANUAL" | "FINNHUB" | "LOGO_DEV" | "BRANDFETCH" | "FALLBACK" | string;
+  logoLastCheckedAt: string | null;
+  logoFailedAt: string | null;
+};
+
 export type PortfolioSummary = {
   metrics: Metric;
   assetAllocation: ChartDatum[];
@@ -220,8 +243,14 @@ export type PortfolioSummary = {
   accountReturns: ChartDatum[];
   topHoldings: Holding[];
   duplicateHoldings: Array<{
+    securityId: string;
     symbol: string;
     name: string;
+    marketCountry: string;
+    currency: string;
+    logoUrl: string | null;
+    companyDomain: string | null;
+    logoSource: "MANUAL" | "FINNHUB" | "LOGO_DEV" | "BRANDFETCH" | "FALLBACK" | string;
     accounts: string[];
     totalQuantity: number;
     totalMarketValue: number;

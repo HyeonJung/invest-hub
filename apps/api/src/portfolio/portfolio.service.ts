@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Broker } from "@prisma/client";
 import { MarketIndicatorsService } from "../market-indicators/market-indicators.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { StockLogoService } from "../securities/stock-logo.service";
 
 const COLORS = ["#3b73ff", "#48c6a7", "#8b5cf6", "#f4bc4f", "#ef6c73", "#27b7d7"];
 
@@ -16,11 +17,15 @@ type HoldingRow = {
   accountSnapshotMarketValue: number | null;
   accountSnapshotProfitLoss: number | null;
   accountSnapshotReturnRate: number | null;
+  securityId: string;
   symbol: string;
   name: string;
   marketCountry: string;
   currency: string;
   assetType: string;
+  logoUrl: string | null;
+  companyDomain: string | null;
+  logoSource: string;
   quantity: number;
   averagePurchasePrice: number;
   marketPrice: number;
@@ -35,7 +40,8 @@ type HoldingRow = {
 export class PortfolioService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly marketIndicatorsService: MarketIndicatorsService
+    private readonly marketIndicatorsService: MarketIndicatorsService,
+    private readonly stockLogoService: StockLogoService
   ) {}
 
   async getSummary(userId: string) {
@@ -81,6 +87,7 @@ export class PortfolioService {
           })
         : [];
     const priceMap = new Map(prices.map((price) => [`${price.symbol}:${price.marketCountry}`, price]));
+    const logoMap = await this.stockLogoService.getLogosForSecurities(rows.map((row) => row.security));
 
     return rows.map((row) => {
       const quantity = Number(row.quantity);
@@ -110,6 +117,7 @@ export class PortfolioService {
           : rawMarketValue;
       const costAmount = shouldConvertUsdAmounts ? rawCostAmount * effectiveUsdKrwRate : rawCostAmount;
       const profitLoss = marketValue - costAmount;
+      const logo = logoMap.get(row.security.id);
 
       return {
         id: row.id,
@@ -120,11 +128,15 @@ export class PortfolioService {
         accountSnapshotMarketValue: row.account.snapshotMarketValue == null ? null : Number(row.account.snapshotMarketValue),
         accountSnapshotProfitLoss: row.account.snapshotProfitLoss == null ? null : Number(row.account.snapshotProfitLoss),
         accountSnapshotReturnRate: row.account.snapshotReturnRate == null ? null : Number(row.account.snapshotReturnRate),
+        securityId: row.security.id,
         symbol: row.security.symbol,
         name: row.security.name,
         marketCountry: row.security.marketCountry,
         currency: row.security.currency,
         assetType: row.security.assetType,
+        logoUrl: logo?.logoUrl ?? row.security.logoUrl ?? null,
+        companyDomain: logo?.companyDomain ?? row.security.companyDomain ?? null,
+        logoSource: logo?.logoSource ?? row.security.logoSource ?? "FALLBACK",
         quantity,
         averagePurchasePrice,
         marketPrice,
@@ -267,6 +279,12 @@ export class PortfolioService {
       .map(([symbol, rows]) => ({
         symbol,
         name: rows[0]?.name ?? symbol,
+        securityId: rows[0]?.securityId ?? "",
+        marketCountry: rows[0]?.marketCountry ?? "",
+        currency: rows[0]?.currency ?? "",
+        logoUrl: rows[0]?.logoUrl ?? null,
+        companyDomain: rows[0]?.companyDomain ?? null,
+        logoSource: rows[0]?.logoSource ?? "FALLBACK",
         accounts: Array.from(new Set(rows.map((row) => row.accountAlias))),
         totalQuantity: sum(rows.map((row) => row.quantity)),
         totalMarketValue: sum(rows.map((row) => row.marketValue))

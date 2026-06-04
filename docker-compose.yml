@@ -1,3 +1,20 @@
+name: invest-hub
+
+x-api-env: &api-env
+  DATABASE_URL: postgresql://investhub:investhub@postgres:5432/investhub?schema=public
+  API_PORT: 4000
+  FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000,http://127.0.0.1:3000}
+  TOSS_CREDENTIAL_SECRET: ${TOSS_CREDENTIAL_SECRET:-invest-hub-local-dev-credential-secret}
+  USD_KRW_RATE: ${USD_KRW_RATE:-1516.5}
+  MARKET_DATA_PROVIDER: ${MARKET_DATA_PROVIDER:-real}
+  REDIS_URL: ${REDIS_URL:-}
+  ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-}
+  TWELVE_DATA_API_KEY: ${TWELVE_DATA_API_KEY:-}
+  FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+  LOGO_DEV_API_KEY: ${LOGO_DEV_API_KEY:-}
+  BRANDFETCH_API_KEY: ${BRANDFETCH_API_KEY:-}
+  FRED_API_KEY: ${FRED_API_KEY:-}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -11,6 +28,52 @@ services:
       - "5433:5432"
     volumes:
       - invest_hub_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U investhub -d investhub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: invest-hub-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *api-env
+    ports:
+      - "4000:4000"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    container_name: invest-hub-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    ports:
+      - "3000:3000"
+
+  seed:
+    profiles:
+      - seed
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: tools
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *api-env
+    command: sh -c "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma && npm run seed -w apps/api"
 
 volumes:
   invest_hub_pg:

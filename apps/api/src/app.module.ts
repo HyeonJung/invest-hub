@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AdminModule } from "./admin/admin.module";
 import { AuthModule } from "./auth/auth.module";
 import { BrokersModule } from "./brokers/brokers.module";
 import { MarketIndicatorsModule } from "./market-indicators/market-indicators.module";
@@ -13,6 +14,7 @@ import { UploadsModule } from "./uploads/uploads.module";
 @Module({
   imports: [
     PrismaModule,
+    AdminModule,
     AuthModule,
     BrokersModule,
     MarketIndicatorsModule,

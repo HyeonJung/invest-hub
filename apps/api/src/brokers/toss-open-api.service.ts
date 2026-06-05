@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { calculateHoldingMarketValue, getPriceMarketState, resolveDisplayPrice } from "../prices/display-price";
 import {
   decryptCredentialSecret,
   encryptCredentialSecret,
@@ -34,11 +36,16 @@ export class TossOpenApiService {
       const overview = holdingsJson.result ?? {};
       const items = Array.isArray(overview.items) ? overview.items : [];
       const accountSnapshot = buildAccountSnapshot(overview, usdKrwRate);
+      const previousPriceBySecurity = await this.getPreviousDisplayPrices(investmentAccount.id);
       await this.prisma.investmentAccount.update({
         where: { id: investmentAccount.id },
         data: accountSnapshot
       });
       await this.prisma.holding.deleteMany({ where: { accountId: investmentAccount.id } });
+
+      let accountMarketValue = 0;
+      let accountCostAmount = 0;
+      let accountProfitLoss = 0;
 
       for (const item of items) {
         const symbol = String(item.symbol ?? "");
@@ -64,18 +71,54 @@ export class TossOpenApiService {
           }
         });
 
-        const currency = item.currency ?? inferCurrency(symbol);
+        const currency = String(item.currency ?? inferCurrency(symbol)).toUpperCase();
         const quantity = Number(item.quantity ?? 0);
         const averagePurchasePrice = Number(item.averagePurchasePrice ?? 0);
-        const marketPrice = Number(item.lastPrice ?? item.marketPrice ?? 0);
+        const lastSuccessfulPrice = previousPriceBySecurity.get(`${symbol}:${marketCountry}`) ?? null;
+        const regularMarketPrice = readFirstMoney(item, [
+          "regularMarketPrice",
+          "currentPrice",
+          "marketPrice",
+          "price"
+        ]);
+        const extendedMarketPrice = readFirstMoney(item, [
+          "extendedMarketPrice",
+          "preMarketPrice",
+          "preMarketTradePrice",
+          "afterMarketPrice",
+          "afterMarketTradePrice",
+          "expectedPrice",
+          "expectedMarketPrice"
+        ]);
+        const lastPrice = readFirstMoney(item, ["lastPrice", "lastTradedPrice", "tradePrice"]);
+        const previousClose = readFirstMoney(item, ["previousClose", "previousClosePrice", "closePrice", "basePrice"]);
+        const resolvedPrice = resolveDisplayPrice({
+          marketCountry,
+          regularMarketPrice,
+          extendedMarketPrice,
+          lastPrice,
+          previousClose,
+          lastSuccessfulPrice
+        });
         const marketValueInCurrency =
-          readMoney(item.marketValue?.amount) || readMoney(item.marketValue) || quantity * marketPrice;
+          readMoney(item.marketValue?.amount) || readMoney(item.marketValue) || quantity * (resolvedPrice?.displayPrice ?? regularMarketPrice ?? lastPrice ?? 0);
         const profitLossInCurrency =
           readMoney(item.profitLoss?.amount) || readMoney(item.profitLoss) || marketValueInCurrency - quantity * averagePurchasePrice;
-        const marketValue = toKrwTradingAmount(marketValueInCurrency, currency, usdKrwRate);
-        const profitLoss = toKrwTradingAmount(profitLossInCurrency, currency, usdKrwRate);
-        const purchaseAmount = Math.max(0, marketValue - profitLoss);
+        const apiMarketValue = toKrwTradingAmount(marketValueInCurrency, currency, usdKrwRate);
+        const apiProfitLoss = toKrwTradingAmount(profitLossInCurrency, currency, usdKrwRate);
+        const apiPurchaseAmount = Math.max(0, apiMarketValue - apiProfitLoss);
+        const displayPrice = resolvedPrice?.displayPrice ?? inferNativePriceFromMarketValue(apiMarketValue, quantity, currency, usdKrwRate);
+        const marketValue =
+          resolvedPrice && quantity > 0
+            ? calculateHoldingMarketValue({ quantity, displayPrice: resolvedPrice.displayPrice, currency, usdKrwRate })
+            : apiMarketValue;
+        const purchaseAmount =
+          apiPurchaseAmount > 0
+            ? apiPurchaseAmount
+            : toKrwTradingAmount(quantity * averagePurchasePrice, currency, usdKrwRate);
+        const profitLoss = marketValue - purchaseAmount;
         const profitLossRate = readRatePercent(item.profitLoss?.rate);
+        const priceUpdatedAt = new Date();
 
         await this.prisma.holding.create({
           data: {
@@ -83,7 +126,15 @@ export class TossOpenApiService {
             securityId: security.id,
             quantity,
             averagePurchasePrice,
-            marketPrice,
+            marketPrice: displayPrice,
+            regularMarketPrice,
+            extendedMarketPrice,
+            lastPrice,
+            previousClose,
+            displayPrice,
+            priceSource: resolvedPrice?.priceSource ?? "LAST_SUCCESSFUL",
+            priceUpdatedAt,
+            isStale: resolvedPrice?.isStale ?? true,
             marketValue,
             costAmount: purchaseAmount,
             profitLoss,
@@ -92,7 +143,37 @@ export class TossOpenApiService {
             sourceType: "API"
           }
         });
+        await this.saveTossCurrentPrice({
+          symbol,
+          marketCountry,
+          currency,
+          regularMarketPrice,
+          extendedMarketPrice,
+          lastPrice,
+          previousClose,
+          displayPrice,
+          priceSource: resolvedPrice?.priceSource ?? "LAST_SUCCESSFUL",
+          isStale: resolvedPrice?.isStale ?? true,
+          usdKrwRate,
+          fetchedAt: priceUpdatedAt
+        });
+        accountMarketValue += marketValue;
+        accountCostAmount += purchaseAmount;
+        accountProfitLoss += profitLoss;
         saved += 1;
+      }
+
+      if (items.length > 0) {
+        await this.prisma.investmentAccount.update({
+          where: { id: investmentAccount.id },
+          data: {
+            snapshotMarketValue: accountMarketValue,
+            snapshotProfitLoss: accountProfitLoss,
+            snapshotReturnRate: accountCostAmount > 0 ? (accountProfitLoss / accountCostAmount) * 100 : 0,
+            snapshotSource: "TOSS_OPEN_API_DISPLAY_PRICE",
+            snapshotSyncedAt: new Date()
+          }
+        });
       }
     }
 
@@ -374,6 +455,103 @@ export class TossOpenApiService {
       });
     }
   }
+
+  private async getPreviousDisplayPrices(accountId: string) {
+    const previousHoldings = await this.prisma.holding.findMany({
+      where: { accountId },
+      include: { security: true }
+    });
+    const prices = new Map<string, number>();
+    for (const holding of previousHoldings) {
+      const price = normalizePreviousNativePrice({
+        currency: holding.security.currency,
+        displayPrice: holding.displayPrice == null ? null : Number(holding.displayPrice),
+        lastPrice: holding.lastPrice == null ? null : Number(holding.lastPrice),
+        marketPrice: Number(holding.marketPrice)
+      });
+      if (price) prices.set(`${holding.security.symbol}:${holding.security.marketCountry}`, price);
+    }
+    return prices;
+  }
+
+  private async saveTossCurrentPrice({
+    symbol,
+    marketCountry,
+    currency,
+    regularMarketPrice,
+    extendedMarketPrice,
+    lastPrice,
+    previousClose,
+    displayPrice,
+    priceSource,
+    isStale,
+    usdKrwRate,
+    fetchedAt
+  }: {
+    symbol: string;
+    marketCountry: string;
+    currency: string;
+    regularMarketPrice: number | null;
+    extendedMarketPrice: number | null;
+    lastPrice: number | null;
+    previousClose: number | null;
+    displayPrice: number;
+    priceSource: string;
+    isStale: boolean;
+    usdKrwRate: number;
+    fetchedAt: Date;
+  }) {
+    if (!Number.isFinite(displayPrice) || displayPrice <= 0) return;
+
+    const state = getPriceMarketState(marketCountry, fetchedAt);
+    const intervalMs = state === "REGULAR" || state === "PRE_MARKET" || state === "AFTER_MARKET" ? 45_000 : 300_000;
+    const priceKrw = currency === "USD" ? displayPrice * usdKrwRate : displayPrice;
+    const expiresAt = new Date(fetchedAt.getTime() + intervalMs);
+
+    await this.prisma.currentPrice.upsert({
+      where: {
+        symbol_marketCountry: {
+          symbol,
+          marketCountry
+        }
+      },
+      create: {
+        symbol,
+        marketCountry,
+        currency,
+        price: new Prisma.Decimal(displayPrice),
+        priceKrw: new Prisma.Decimal(priceKrw),
+        regularMarketPrice,
+        extendedMarketPrice,
+        lastPrice,
+        previousClose,
+        displayPrice,
+        priceSource,
+        priceUpdatedAt: fetchedAt,
+        isStale,
+        source: "TOSS_OPEN_API",
+        fetchedAt,
+        expiresAt
+      },
+      update: {
+        currency,
+        price: new Prisma.Decimal(displayPrice),
+        priceKrw: new Prisma.Decimal(priceKrw),
+        regularMarketPrice,
+        extendedMarketPrice,
+        lastPrice,
+        previousClose,
+        displayPrice,
+        priceSource,
+        priceUpdatedAt: fetchedAt,
+        isStale,
+        source: "TOSS_OPEN_API",
+        fetchedAt,
+        expiresAt,
+        errorMessage: null
+      }
+    });
+  }
 }
 
 function readMoney(value: any) {
@@ -381,6 +559,40 @@ function readMoney(value: any) {
   if (typeof value === "number") return value;
   if (typeof value === "string") return Number(value.replace(/[^0-9.-]/g, ""));
   return Number(value.amount ?? value.value ?? value.total ?? value.krw ?? value.usd ?? 0);
+}
+
+function readFirstMoney(source: any, keys: string[]) {
+  for (const key of keys) {
+    const value = readMoney(source?.[key]);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  return null;
+}
+
+function inferNativePriceFromMarketValue(marketValueKrw: number, quantity: number, currency: string, usdKrwRate: number) {
+  if (!Number.isFinite(marketValueKrw) || marketValueKrw <= 0 || !Number.isFinite(quantity) || quantity <= 0) return 0;
+  const nativeMarketValue = currency === "USD" ? marketValueKrw / usdKrwRate : marketValueKrw;
+  return nativeMarketValue / quantity;
+}
+
+function normalizePreviousNativePrice({
+  currency,
+  displayPrice,
+  lastPrice,
+  marketPrice
+}: {
+  currency: string;
+  displayPrice: number | null;
+  lastPrice: number | null;
+  marketPrice: number;
+}) {
+  const candidates = [displayPrice, lastPrice, marketPrice];
+  for (const candidate of candidates) {
+    if (!Number.isFinite(candidate ?? 0) || (candidate ?? 0) <= 0) continue;
+    if (currency === "USD" && (candidate ?? 0) >= 10000) continue;
+    return candidate ?? null;
+  }
+  return null;
 }
 
 function readExchangeRate(value: any): number {

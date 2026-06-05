@@ -26,6 +26,7 @@ x-api-env: &api-env
   LOGO_DEV_API_KEY: ${LOGO_DEV_API_KEY:-}
   BRANDFETCH_API_KEY: ${BRANDFETCH_API_KEY:-}
   FRED_API_KEY: ${FRED_API_KEY:-}
+  LOGO_UPLOAD_DIR: ${LOGO_UPLOAD_DIR:-/app/uploads/logos}
 
 services:
   postgres:
@@ -58,6 +59,8 @@ services:
     environment: *api-env
     ports:
       - "4000:4000"
+    volumes:
+      - invest_hub_uploads:/app/uploads
 
   web:
     build:
@@ -89,3 +92,4 @@ services:
 
 volumes:
   invest_hub_pg:
+  invest_hub_uploads:

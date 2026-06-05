@@ -29,6 +29,14 @@ type HoldingRow = {
   quantity: number;
   averagePurchasePrice: number;
   marketPrice: number;
+  regularMarketPrice: number | null;
+  extendedMarketPrice: number | null;
+  lastPrice: number | null;
+  previousClose: number | null;
+  displayPrice: number | null;
+  priceSource: string | null;
+  priceUpdatedAt: string | null;
+  isStale: boolean;
   marketValue: number;
   costAmount: number;
   profitLoss: number;
@@ -103,21 +111,31 @@ export class PortfolioService {
         marketPrice: storedMarketPrice,
         marketValue: rawMarketValue
       });
-      const liveMarketPrice =
-        cachedPrice && row.security.currency === "USD"
-          ? Number(cachedPrice.price) * effectiveUsdKrwRate
-          : cachedPrice
-            ? Number(cachedPrice.priceKrw)
-            : null;
-      const marketPrice = liveMarketPrice ?? (shouldConvertUsdAmounts ? storedMarketPrice * effectiveUsdKrwRate : storedMarketPrice);
-      const marketValue = liveMarketPrice
-        ? quantity * liveMarketPrice
-        : shouldConvertUsdAmounts
-          ? rawMarketValue * effectiveUsdKrwRate
-          : rawMarketValue;
+      const cachedNativePrice = cachedPrice
+        ? Number(cachedPrice.displayPrice ?? cachedPrice.price)
+        : null;
+      const storedDisplayPrice = row.displayPrice == null ? null : Number(row.displayPrice);
+      const nativeMarketPrice = validPrice(cachedNativePrice) ?? validPrice(storedDisplayPrice) ?? storedMarketPrice;
+      const liveKrwMarketPrice = cachedPrice
+        ? Number(cachedPrice.priceKrw)
+        : row.security.currency === "USD"
+          ? nativeMarketPrice * effectiveUsdKrwRate
+          : nativeMarketPrice;
+      const marketValue =
+        liveKrwMarketPrice > 0 && quantity > 0
+          ? quantity * liveKrwMarketPrice
+          : shouldConvertUsdAmounts
+            ? rawMarketValue * effectiveUsdKrwRate
+            : rawMarketValue;
       const costAmount = shouldConvertUsdAmounts ? rawCostAmount * effectiveUsdKrwRate : rawCostAmount;
       const profitLoss = marketValue - costAmount;
       const logo = logoMap.get(row.security.id);
+      const priceSource = cachedPrice?.priceSource ?? row.priceSource ?? null;
+      const priceUpdatedAt =
+        cachedPrice?.priceUpdatedAt?.toISOString() ??
+        cachedPrice?.fetchedAt?.toISOString() ??
+        row.priceUpdatedAt?.toISOString() ??
+        null;
 
       return {
         id: row.id,
@@ -139,7 +157,15 @@ export class PortfolioService {
         logoSource: logo?.logoSource ?? row.security.logoSource ?? "FALLBACK",
         quantity,
         averagePurchasePrice,
-        marketPrice,
+        marketPrice: nativeMarketPrice,
+        regularMarketPrice: toNullableNumber(cachedPrice?.regularMarketPrice ?? row.regularMarketPrice),
+        extendedMarketPrice: toNullableNumber(cachedPrice?.extendedMarketPrice ?? row.extendedMarketPrice),
+        lastPrice: toNullableNumber(cachedPrice?.lastPrice ?? row.lastPrice),
+        previousClose: toNullableNumber(cachedPrice?.previousClose ?? row.previousClose),
+        displayPrice: toNullableNumber(cachedPrice?.displayPrice ?? row.displayPrice),
+        priceSource,
+        priceUpdatedAt,
+        isStale: Boolean(cachedPrice?.isStale ?? row.isStale),
         marketValue,
         costAmount,
         profitLoss,
@@ -257,9 +283,8 @@ export class PortfolioService {
       const first = rows[0];
       const fallbackMarketValue = sum(rows.map((row) => row.marketValue));
       const fallbackProfitLoss = sum(rows.map((row) => row.profitLoss));
-      const marketValue = first?.accountSnapshotMarketValue ?? fallbackMarketValue;
-      const profitLoss = first?.accountSnapshotProfitLoss ?? fallbackProfitLoss;
-      const snapshotReturnRate = first?.accountSnapshotReturnRate;
+      const marketValue = fallbackMarketValue;
+      const profitLoss = fallbackProfitLoss;
       const cost = Math.max(0, marketValue - profitLoss);
 
       return {
@@ -267,7 +292,7 @@ export class PortfolioService {
         name: first?.accountAlias ?? "",
         marketValue,
         profitLoss,
-        returnRate: snapshotReturnRate ?? (cost > 0 ? (profitLoss / cost) * 100 : 0)
+        returnRate: cost > 0 ? (profitLoss / cost) * 100 : 0
       };
     });
   }
@@ -325,6 +350,16 @@ export class PortfolioService {
 
 function sum(values: number[]) {
   return values.reduce((acc, value) => acc + value, 0);
+}
+
+function toNullableNumber(value: unknown) {
+  if (value == null) return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function validPrice(value: number | null | undefined) {
+  return Number.isFinite(value ?? NaN) && (value ?? 0) > 0 ? (value as number) : null;
 }
 
 function groupBy<T>(rows: T[], keyGetter: (row: T) => string) {

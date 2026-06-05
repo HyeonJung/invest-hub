@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, getApiBaseUrl } from "@/lib/utils";
 
 type SecurityLogoSize = "sm" | "md" | "lg" | "xl";
 
@@ -44,7 +44,7 @@ export function SecurityLogo({
   showCountryBadge = false,
   className
 }: SecurityLogoProps) {
-  const normalizedLogoUrl = logoUrl?.trim() || null;
+  const normalizedLogoUrl = normalizeLogoUrl(logoUrl);
   const [failed, setFailed] = useState(Boolean(normalizedLogoUrl && failedLogoUrls.has(normalizedLogoUrl)));
   const shouldShowImage = Boolean(normalizedLogoUrl && !failed && !failedLogoUrls.has(normalizedLogoUrl));
   const classes = sizeClasses[size];
@@ -105,6 +105,13 @@ function fallbackLogo(symbol: string, name: string) {
     letter,
     gradient: `linear-gradient(135deg, ${from}, ${to})`
   };
+}
+
+function normalizeLogoUrl(logoUrl?: string | null) {
+  const trimmed = logoUrl?.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("/api/")) return `${getApiBaseUrl()}${trimmed}`;
+  return trimmed;
 }
 
 function countryFlag(marketCountry: string) {

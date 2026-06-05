@@ -1,4 +1,4 @@
-import type { SocialProvider } from "@prisma/client";
+import type { SocialProvider, UserRole } from "@prisma/client";
 
 export type OAuthProvider = Extract<SocialProvider, "KAKAO" | "NAVER">;
 
@@ -21,6 +21,7 @@ export type AuthenticatedUser = {
   email: string;
   name: string;
   profileImageUrl: string | null;
+  role: UserRole;
   lastLoginAt: Date | null;
   providers: OAuthProvider[];
 };

@@ -62,6 +62,45 @@ export const api = {
       method: "POST",
       token
     }),
+  adminSecurities: (params: { q?: string; marketCountry?: string; limit?: number } = {}, token?: string | null) => {
+    const search = new URLSearchParams();
+    if (params.q) search.set("q", params.q);
+    if (params.marketCountry) search.set("marketCountry", params.marketCountry);
+    if (params.limit) search.set("limit", String(params.limit));
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return request<AdminSecuritiesResult>(`/api/admin/securities${suffix}`, { token });
+  },
+  adminSecurity: (securityId: string, token?: string | null) =>
+    request<AdminSecurity>(`/api/admin/securities/${securityId}`, { token }),
+  updateAdminSecurityLogo: (
+    securityId: string,
+    payload: { name?: string; marketCountry?: string; companyDomain?: string | null; logoUrl?: string | null; logoSource?: SecurityLogoSource | null },
+    token?: string | null
+  ) =>
+    request<AdminSecurity>(`/api/admin/securities/${securityId}/logo`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      token
+    }),
+  uploadAdminSecurityLogo: (securityId: string, file: File, token?: string | null) => {
+    const body = new FormData();
+    body.append("file", file);
+    return request<AdminSecurity>(`/api/admin/securities/${securityId}/logo/upload`, {
+      method: "POST",
+      body,
+      token
+    });
+  },
+  refreshAdminSecurityLogo: (securityId: string, token?: string | null) =>
+    request<SecurityLogoResult>(`/api/admin/securities/${securityId}/logo/refresh`, {
+      method: "POST",
+      token
+    }),
+  deleteAdminSecurityLogo: (securityId: string, token?: string | null) =>
+    request<AdminSecurity>(`/api/admin/securities/${securityId}/logo`, {
+      method: "DELETE",
+      token
+    }),
   syncToss: (payload: { accountId?: string; clientId?: string; clientSecret?: string }, token: string | null) =>
     request<{ accounts: number; saved: number }>("/brokers/toss/sync", {
       method: "POST",
@@ -197,6 +236,7 @@ export type AuthUser = {
   email: string;
   name: string;
   profileImageUrl: string | null;
+  role: "USER" | "ADMIN";
   lastLoginAt: string | null;
   providers: Array<"KAKAO" | "NAVER">;
 };
@@ -230,10 +270,18 @@ export type Holding = {
   assetType: string;
   logoUrl: string | null;
   companyDomain: string | null;
-  logoSource: "MANUAL" | "FINNHUB" | "LOGO_DEV" | "BRANDFETCH" | "FALLBACK" | string;
+  logoSource: SecurityLogoSource | string;
   quantity: number;
   averagePurchasePrice: number;
   marketPrice: number;
+  regularMarketPrice: number | null;
+  extendedMarketPrice: number | null;
+  lastPrice: number | null;
+  previousClose: number | null;
+  displayPrice: number | null;
+  priceSource: string | null;
+  priceUpdatedAt: string | null;
+  isStale: boolean;
   marketValue: number;
   costAmount: number;
   profitLoss: number;
@@ -248,9 +296,31 @@ export type SecurityLogoResult = {
   marketCountry: string;
   logoUrl: string | null;
   companyDomain: string | null;
-  logoSource: "MANUAL" | "FINNHUB" | "LOGO_DEV" | "BRANDFETCH" | "FALLBACK" | string;
+  logoSource: SecurityLogoSource | string;
   logoLastCheckedAt: string | null;
   logoFailedAt: string | null;
+};
+
+export type SecurityLogoSource = "MANUAL" | "UPLOAD" | "FINNHUB" | "LOGO_DEV" | "BRANDFETCH" | "FALLBACK";
+
+export type AdminSecurity = {
+  id: string;
+  symbol: string;
+  name: string;
+  marketCountry: string;
+  currency: string;
+  assetType: string;
+  companyDomain: string | null;
+  logoUrl: string | null;
+  logoSource: SecurityLogoSource | string;
+  logoLastCheckedAt: string | null;
+  logoFailedAt: string | null;
+};
+
+export type AdminSecuritiesResult = {
+  total: number;
+  limit: number;
+  items: AdminSecurity[];
 };
 
 export type PortfolioSummary = {
@@ -267,7 +337,7 @@ export type PortfolioSummary = {
     currency: string;
     logoUrl: string | null;
     companyDomain: string | null;
-    logoSource: "MANUAL" | "FINNHUB" | "LOGO_DEV" | "BRANDFETCH" | "FALLBACK" | string;
+    logoSource: SecurityLogoSource | string;
     accounts: string[];
     totalQuantity: number;
     totalMarketValue: number;

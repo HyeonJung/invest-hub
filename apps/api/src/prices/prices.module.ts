@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
+import { BrokersModule } from "../brokers/brokers.module";
 import { KiwoomRestAdapter } from "../brokers/adapters/kiwoom-rest.adapter";
 import { NamuhOpenApiAdapter } from "../brokers/adapters/namuh-open-api.adapter";
 import { MarketIndicatorsModule } from "../market-indicators/market-indicators.module";
@@ -7,7 +8,7 @@ import { PricesController } from "./prices.controller";
 import { PricesService } from "./prices.service";
 
 @Module({
-  imports: [AuthModule, MarketIndicatorsModule],
+  imports: [AuthModule, BrokersModule, MarketIndicatorsModule],
   controllers: [PricesController],
   providers: [PricesService, KiwoomRestAdapter, NamuhOpenApiAdapter],
   exports: [PricesService]

@@ -470,6 +470,15 @@ function Sidebar({
               onClick={() => onNavigate(item.target)}
             />
           ))}
+          {user?.role === "ADMIN" ? (
+            <a
+              href="/admin/securities/logos"
+              className="relative flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-[13px] font-bold text-[#94A3B8] transition hover:bg-[#13223A] hover:text-[#E5EAF2]"
+            >
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">관리자 로고</span>
+            </a>
+          ) : null}
         </section>
       </nav>
       <div className="mt-5 space-y-2 pb-1">
@@ -1794,6 +1803,9 @@ type TossHoldingRow = {
   totalQuantity: number;
   averagePurchasePrice: number;
   marketPrice: number;
+  priceSource: string | null;
+  priceUpdatedAt: string | null;
+  isStale: boolean;
   marketValue: number;
   costAmount: number;
   profitLoss: number;
@@ -1810,6 +1822,9 @@ type TossHoldingRow = {
     quantity: number;
     averagePurchasePrice: number;
     marketPrice: number;
+    priceSource: string | null;
+    priceUpdatedAt: string | null;
+    isStale: boolean;
     marketValue: number;
     costAmount: number;
     profitLoss: number;
@@ -2043,11 +2058,29 @@ function TossHoldingRowButton({
           <p className={cn("numeric mt-0.5 max-w-full overflow-hidden text-ellipsis text-xs font-black", profitColor)}>
             {formatSignedKrw(holding.profitLoss)} ({formatPercent(holding.profitLossRate)})
           </p>
+          <div className="mt-1 flex justify-end">
+            <PriceSourceBadge source={holding.priceSource} isStale={holding.isStale} updatedAt={holding.priceUpdatedAt} />
+          </div>
           <p className="numeric mt-0.5 text-[10px] font-bold text-slate-500">비중 {holding.portfolioWeight.toFixed(1)}%</p>
         </div>
         <ChevronRight className={cn("h-4 w-4 text-slate-600 transition group-hover:text-slate-300", selected && "text-slate-300")} />
       </div>
     </button>
+  );
+}
+
+function PriceSourceBadge({ source, isStale, updatedAt }: { source: string | null; isStale: boolean; updatedAt: string | null }) {
+  const meta = priceSourceMeta(source, isStale);
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 max-w-full items-center rounded-full px-2 text-[10px] font-black",
+        meta.className
+      )}
+      title={`${meta.tooltip}${updatedAt ? ` · ${formatDateTime(updatedAt)}` : ""}`}
+    >
+      {meta.label}
+    </span>
   );
 }
 
@@ -5719,6 +5752,9 @@ function buildTossHoldingRows(holdings: Holding[], totalMarketValue: number, sea
         totalQuantity: 0,
         averagePurchasePrice: 0,
         marketPrice: 0,
+        priceSource: null,
+        priceUpdatedAt: null,
+        isStale: false,
         marketValue: 0,
         costAmount: 0,
         profitLoss: 0,
@@ -5734,6 +5770,9 @@ function buildTossHoldingRows(holdings: Holding[], totalMarketValue: number, sea
     existing.totalQuantity += quantity;
     existing.averagePurchasePrice += averagePurchasePrice * quantity;
     existing.marketPrice += marketPrice * quantity;
+    existing.priceSource = existing.priceSource ?? holding.priceSource;
+    existing.priceUpdatedAt = existing.priceUpdatedAt ?? holding.priceUpdatedAt;
+    existing.isStale = existing.isStale || holding.isStale;
     existing.marketValue += marketValue;
     existing.costAmount += costAmount;
     existing.profitLoss += profitLoss;
@@ -5745,6 +5784,9 @@ function buildTossHoldingRows(holdings: Holding[], totalMarketValue: number, sea
       quantity,
       averagePurchasePrice,
       marketPrice,
+      priceSource: holding.priceSource,
+      priceUpdatedAt: holding.priceUpdatedAt,
+      isStale: holding.isStale,
       marketValue,
       costAmount,
       profitLoss,
@@ -5836,6 +5878,40 @@ function formatHoldingPrice(value: number, currency: string) {
     return `$${safeValue.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
   }
   return formatKrw(safeValue);
+}
+
+function priceSourceMeta(source: string | null, isStale: boolean) {
+  if (isStale) {
+    return {
+      label: source === "PREVIOUS_CLOSE" ? "전일종가" : "마지막 성공",
+      tooltip: source === "PREVIOUS_CLOSE" ? "전일 종가 기준 가격입니다." : "마지막 성공 가격 기준입니다.",
+      className: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200"
+    };
+  }
+
+  const sourceKey = source ?? "REGULAR";
+  const meta: Record<string, { label: string; tooltip: string; className: string }> = {
+    REGULAR: {
+      label: "장중",
+      tooltip: "정규장 현재가 기준입니다.",
+      className: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
+    },
+    EXTENDED: {
+      label: "장전/장후",
+      tooltip: "장전 또는 장후 가격 기준입니다.",
+      className: "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
+    },
+    LAST: {
+      label: "최근 체결",
+      tooltip: "최근 체결가 기준입니다.",
+      className: "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200"
+    }
+  };
+  return meta[sourceKey] ?? {
+    label: "현재가",
+    tooltip: "현재 표시 가격 기준입니다.",
+    className: "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200"
+  };
 }
 
 function formatMarketIndicatorValue(indicator: MarketIndicatorsResult["indicators"][number]) {

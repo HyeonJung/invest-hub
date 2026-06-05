@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
 import type { Request, Response } from "express";
-import type { SocialProvider } from "@prisma/client";
+import type { SocialProvider, UserRole } from "@prisma/client";
 import { encryptCredentialSecret } from "../common/credential-crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import type { AuthenticatedUser, OAuthProfile, OAuthProvider, OAuthTokenResponse } from "./oauth.types";
@@ -318,6 +318,7 @@ export class AuthService {
     email: string;
     name: string;
     profileImageUrl: string | null;
+    role: UserRole;
     lastLoginAt: Date | null;
     socialAccounts: Array<{ provider: SocialProvider }>;
   }): AuthenticatedUser {
@@ -326,6 +327,7 @@ export class AuthService {
       email: user.email,
       name: user.name,
       profileImageUrl: user.profileImageUrl,
+      role: user.role,
       lastLoginAt: user.lastLoginAt,
       providers: user.socialAccounts.map((account) => account.provider as OAuthProvider)
     };

@@ -301,7 +301,8 @@ async function main() {
       email: "demo@investhub.kr",
       name: "김투자",
       passwordHash: "demo123",
-      plan: "PREMIUM"
+      plan: "PREMIUM",
+      role: "ADMIN"
     }
   });
 

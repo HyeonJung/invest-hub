@@ -43,6 +43,7 @@ enum SourceType {
 
 enum LogoSource {
   MANUAL
+  UPLOAD
   FINNHUB
   LOGO_DEV
   BRANDFETCH
@@ -54,6 +55,11 @@ enum SocialProvider {
   NAVER
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 model User {
   id              String   @id @default(uuid())
   email           String   @unique
@@ -61,6 +67,7 @@ model User {
   passwordHash    String?
   profileImageUrl String?  @map("profile_image_url")
   plan            String   @default("FREE")
+  role            UserRole @default(USER)
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
   lastLoginAt     DateTime? @map("last_login_at")
@@ -183,6 +190,14 @@ model CurrentPrice {
   currency      String
   price         Decimal  @db.Decimal(18, 6)
   priceKrw      Decimal  @db.Decimal(18, 4)
+  regularMarketPrice  Decimal? @map("regular_market_price") @db.Decimal(18, 6)
+  extendedMarketPrice Decimal? @map("extended_market_price") @db.Decimal(18, 6)
+  lastPrice           Decimal? @map("last_price") @db.Decimal(18, 6)
+  previousClose       Decimal? @map("previous_close") @db.Decimal(18, 6)
+  displayPrice        Decimal? @map("display_price") @db.Decimal(18, 6)
+  priceSource         String?  @map("price_source")
+  priceUpdatedAt      DateTime? @map("price_updated_at")
+  isStale             Boolean @default(false) @map("is_stale")
   source        String
   fetchedAt     DateTime
   expiresAt     DateTime
@@ -221,6 +236,14 @@ model Holding {
   quantity               Decimal  @db.Decimal(18, 6)
   averagePurchasePrice   Decimal  @db.Decimal(18, 4)
   marketPrice            Decimal  @db.Decimal(18, 4)
+  regularMarketPrice     Decimal? @map("regular_market_price") @db.Decimal(18, 6)
+  extendedMarketPrice    Decimal? @map("extended_market_price") @db.Decimal(18, 6)
+  lastPrice              Decimal? @map("last_price") @db.Decimal(18, 6)
+  previousClose          Decimal? @map("previous_close") @db.Decimal(18, 6)
+  displayPrice           Decimal? @map("display_price") @db.Decimal(18, 6)
+  priceSource            String?  @map("price_source")
+  priceUpdatedAt         DateTime? @map("price_updated_at")
+  isStale                Boolean @default(false) @map("is_stale")
   marketValue            Decimal  @db.Decimal(18, 2)
   costAmount             Decimal  @db.Decimal(18, 2)
   profitLoss             Decimal  @db.Decimal(18, 2)

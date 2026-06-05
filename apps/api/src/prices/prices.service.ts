@@ -2,8 +2,10 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, Security } from "@prisma/client";
 import { KiwoomRestAdapter } from "../brokers/adapters/kiwoom-rest.adapter";
 import { NamuhOpenApiAdapter } from "../brokers/adapters/namuh-open-api.adapter";
+import { TossOpenApiService } from "../brokers/toss-open-api.service";
 import { MarketIndicatorsService } from "../market-indicators/market-indicators.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { resolveDisplayPrice } from "./display-price";
 import { getMarketSession } from "./market-clock";
 
 type Quote = {
@@ -13,6 +15,13 @@ type Quote = {
   priceKrw: number;
   currency: string;
   source: string;
+  regularMarketPrice?: number | null;
+  extendedMarketPrice?: number | null;
+  lastPrice?: number | null;
+  previousClose?: number | null;
+  displayPrice?: number | null;
+  priceSource?: string | null;
+  isStale?: boolean;
 };
 
 @Injectable()
@@ -20,6 +29,7 @@ export class PricesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly marketIndicatorsService: MarketIndicatorsService,
+    private readonly tossOpenApiService: TossOpenApiService,
     private readonly kiwoomRestAdapter: KiwoomRestAdapter,
     private readonly namuhOpenApiAdapter: NamuhOpenApiAdapter
   ) {}
@@ -28,6 +38,8 @@ export class PricesService {
     const startedAt = new Date();
     const marketSession = getMarketSession(startedAt);
     const usdKrwRate = await this.marketIndicatorsService.getUsdKrwRate(userId);
+    const errors: string[] = [];
+    const tossResult = await this.refreshTossHoldingsIfAvailable(userId, errors);
     const allHoldings = await this.prisma.holding.findMany({
       where: {
         account: { userId },
@@ -36,6 +48,10 @@ export class PricesService {
           account: { broker: "TOSS" }
         }
       },
+      include: { security: true, account: true }
+    });
+    const allUserHoldings = await this.prisma.holding.findMany({
+      where: { account: { userId } },
       include: { security: true, account: true }
     });
     const kiwoomApiHoldings = allHoldings.filter(
@@ -50,7 +66,7 @@ export class PricesService {
     const securities = uniqueSecurities(holdings.map((holding) => holding.security));
     const kiwoomSecurities = uniqueSecurities(kiwoomApiHoldings.map((holding) => holding.security));
     const namuhSecurities = uniqueSecurities(namuhApiHoldings.map((holding) => holding.security));
-    const allSecurities = uniqueSecurities(allHoldings.map((holding) => holding.security));
+    const allSecurities = uniqueSecurities(allUserHoldings.map((holding) => holding.security));
     const usableSecurities = securities.filter((security) => canFetchQuote(security));
 
     const cached = await this.getFreshCachedQuotes(usableSecurities, marketSession.refreshIntervalMs, usdKrwRate);
@@ -61,7 +77,7 @@ export class PricesService {
     const quotes = new Map<string, Quote>([...cached, ...fetched, ...kiwoomResult.quotes, ...namuhResult.quotes]);
 
     let updatedHoldings = 0;
-    const errors: string[] = [...kiwoomResult.errors, ...namuhResult.errors];
+    errors.push(...kiwoomResult.errors, ...namuhResult.errors);
     const skipped = securities
       .filter((security) => !canFetchQuote(security))
       .map((security) => security.symbol);
@@ -104,7 +120,15 @@ export class PricesService {
       await this.prisma.holding.update({
         where: { id: holding.id },
         data: {
-          marketPrice: quote.priceKrw,
+          marketPrice: quote.price,
+          regularMarketPrice: quote.regularMarketPrice ?? quote.price,
+          extendedMarketPrice: quote.extendedMarketPrice ?? null,
+          lastPrice: quote.lastPrice ?? quote.price,
+          previousClose: quote.previousClose ?? null,
+          displayPrice: quote.displayPrice ?? quote.price,
+          priceSource: quote.priceSource ?? "REGULAR",
+          priceUpdatedAt: startedAt,
+          isStale: quote.isStale ?? false,
           marketValue,
           costAmount,
           profitLoss,
@@ -125,8 +149,9 @@ export class PricesService {
       marketSession,
       symbolsRequested: allSecurities.length,
       symbolsFetched: successfulQuotes.length,
-      holdingsUpdated: updatedHoldings,
+      holdingsUpdated: updatedHoldings + (tossResult?.saved ?? 0),
       source: [
+        tossResult ? "TOSS_OPEN_API" : null,
         "YAHOO_FINANCE",
         kiwoomResult.quotes.size > 0 ? "KIWOOM_REST_API" : null,
         namuhResult.quotes.size > 0 ? "NAMUH_WMCA" : null
@@ -152,6 +177,25 @@ export class PricesService {
     };
   }
 
+  private async refreshTossHoldingsIfAvailable(userId: string, errors: string[]) {
+    const credential = await this.prisma.accountApiCredential.findFirst({
+      where: {
+        userId,
+        broker: "TOSS",
+        status: "ACTIVE"
+      },
+      select: { id: true }
+    });
+    if (!credential) return null;
+
+    try {
+      return await this.tossOpenApiService.syncHoldings(userId);
+    } catch (error) {
+      errors.push(`토스 현재가 갱신 실패. 마지막 성공 가격을 유지합니다. ${(error as Error).message}`);
+      return null;
+    }
+  }
+
   private async getFreshCachedQuotes(securities: Security[], intervalMs: number, usdKrwRate: number) {
     const now = new Date();
     const minFetchedAt = new Date(now.getTime() - Math.max(20_000, Math.floor(intervalMs * 0.75)));
@@ -166,19 +210,26 @@ export class PricesService {
       }
     });
 
-    return new Map(
-      cachedRows.map((row) => [
-        `${row.symbol}:${row.marketCountry}`,
-        {
-          symbol: row.symbol,
-          marketCountry: row.marketCountry,
-          price: Number(row.price),
-          priceKrw: row.currency === "USD" ? Number(row.price) * usdKrwRate : Number(row.priceKrw),
-          currency: row.currency,
-          source: row.source
-        }
-      ])
-    );
+    const quotes = new Map<string, Quote>();
+    for (const row of cachedRows) {
+        const displayPrice = Number(row.displayPrice ?? row.price);
+      quotes.set(`${row.symbol}:${row.marketCountry}`, {
+        symbol: row.symbol,
+        marketCountry: row.marketCountry,
+        price: displayPrice,
+        priceKrw: row.currency === "USD" ? displayPrice * usdKrwRate : Number(row.priceKrw),
+        currency: row.currency,
+        source: row.source,
+        regularMarketPrice: toNullableNumber(row.regularMarketPrice),
+        extendedMarketPrice: toNullableNumber(row.extendedMarketPrice),
+        lastPrice: toNullableNumber(row.lastPrice),
+        previousClose: toNullableNumber(row.previousClose),
+        displayPrice: toNullableNumber(row.displayPrice),
+        priceSource: row.priceSource,
+        isStale: row.isStale
+      });
+    }
+    return quotes;
   }
 
   private async fetchYahooQuotes(securities: Security[], usdKrwRate: number) {
@@ -204,6 +255,9 @@ export class PricesService {
           result?: Array<{
             symbol?: string;
             regularMarketPrice?: number;
+            preMarketPrice?: number;
+            postMarketPrice?: number;
+            regularMarketPreviousClose?: number;
             currency?: string;
           }>;
         };
@@ -220,17 +274,34 @@ export class PricesService {
         if (!yahooSymbol) continue;
 
         const row = byYahooSymbol.get(yahooSymbol);
-        const price = Number(row?.regularMarketPrice ?? 0);
-        if (!Number.isFinite(price) || price <= 0) continue;
-
         const currency = row?.currency ?? security.currency;
+        const regularMarketPrice = toPositiveNumber(row?.regularMarketPrice);
+        const extendedMarketPrice = toPositiveNumber(row?.postMarketPrice) ?? toPositiveNumber(row?.preMarketPrice);
+        const previousClose = toPositiveNumber(row?.regularMarketPreviousClose);
+        const resolvedPrice = resolveDisplayPrice({
+          marketCountry: security.marketCountry,
+          regularMarketPrice,
+          extendedMarketPrice,
+          lastPrice: regularMarketPrice,
+          previousClose
+        });
+        if (!resolvedPrice) continue;
+
+        const price = resolvedPrice.displayPrice;
         const quote: Quote = {
           symbol: security.symbol,
           marketCountry: security.marketCountry,
           price,
           priceKrw: currency === "USD" ? price * usdKrwRate : price,
           currency,
-          source: "YAHOO_FINANCE"
+          source: "YAHOO_FINANCE",
+          regularMarketPrice,
+          extendedMarketPrice,
+          lastPrice: regularMarketPrice,
+          previousClose,
+          displayPrice: price,
+          priceSource: resolvedPrice.priceSource,
+          isStale: resolvedPrice.isStale
         };
         quotes.set(cacheKey(security), quote);
         await this.saveQuote(quote, getMarketSession().refreshIntervalMs);
@@ -259,7 +330,12 @@ export class PricesService {
           price: quote.price,
           priceKrw: quote.priceKrw,
           currency: quote.currency,
-          source: quote.source
+          source: quote.source,
+          regularMarketPrice: quote.price,
+          lastPrice: quote.price,
+          displayPrice: quote.price,
+          priceSource: "REGULAR",
+          isStale: false
         };
         quotes.set(`${quote.symbol}:${quote.marketCountry}`, normalized);
         await this.saveQuote(normalized, intervalMs);
@@ -291,7 +367,12 @@ export class PricesService {
           price: quote.price,
           priceKrw: quote.priceKrw,
           currency: quote.currency,
-          source: quote.source
+          source: quote.source,
+          regularMarketPrice: quote.price,
+          lastPrice: quote.price,
+          displayPrice: quote.price,
+          priceSource: "REGULAR",
+          isStale: false
         };
         quotes.set(`${quote.symbol}:${quote.marketCountry}`, normalized);
         await this.saveQuote(normalized, intervalMs);
@@ -323,6 +404,14 @@ export class PricesService {
         currency: quote.currency,
         price: new Prisma.Decimal(quote.price),
         priceKrw: new Prisma.Decimal(quote.priceKrw),
+        regularMarketPrice: quote.regularMarketPrice ?? quote.price,
+        extendedMarketPrice: quote.extendedMarketPrice ?? null,
+        lastPrice: quote.lastPrice ?? quote.price,
+        previousClose: quote.previousClose ?? null,
+        displayPrice: quote.displayPrice ?? quote.price,
+        priceSource: quote.priceSource ?? "REGULAR",
+        priceUpdatedAt: fetchedAt,
+        isStale: quote.isStale ?? false,
         source: quote.source,
         fetchedAt,
         expiresAt
@@ -331,6 +420,14 @@ export class PricesService {
         currency: quote.currency,
         price: new Prisma.Decimal(quote.price),
         priceKrw: new Prisma.Decimal(quote.priceKrw),
+        regularMarketPrice: quote.regularMarketPrice ?? quote.price,
+        extendedMarketPrice: quote.extendedMarketPrice ?? null,
+        lastPrice: quote.lastPrice ?? quote.price,
+        previousClose: quote.previousClose ?? null,
+        displayPrice: quote.displayPrice ?? quote.price,
+        priceSource: quote.priceSource ?? "REGULAR",
+        priceUpdatedAt: fetchedAt,
+        isStale: quote.isStale ?? false,
         source: quote.source,
         fetchedAt,
         expiresAt,
@@ -373,6 +470,17 @@ function yahooSymbolsFor(security: Security) {
     return [`${security.symbol}.KS`, `${security.symbol}.KQ`];
   }
   return [];
+}
+
+function toNullableNumber(value: unknown) {
+  if (value == null) return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function toPositiveNumber(value: unknown) {
+  const numberValue = toNullableNumber(value);
+  return numberValue && numberValue > 0 ? numberValue : null;
 }
 
 function normalizeStoredAmount({

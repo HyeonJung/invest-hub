@@ -77,7 +77,7 @@ export default function LoginPage() {
         ) : null}
 
         <div className="mt-8 space-y-3">
-          <Button
+          {/* <Button
             type="button"
             className="h-[52px] w-full justify-between rounded-[14px] bg-[#FEE500] px-4 text-[15px] font-black text-[#191919] shadow-none hover:bg-[#F6D900]"
             onClick={() => startSocialLogin("kakao")}
@@ -88,7 +88,7 @@ export default function LoginPage() {
               카카오로 계속하기
             </span>
             {loadingProvider === "kakao" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-          </Button>
+          </Button> */}
           <Button
             type="button"
             className="h-[52px] w-full justify-between rounded-[14px] bg-[#03C75A] px-4 text-[15px] font-black text-white shadow-none hover:bg-[#02B552]"

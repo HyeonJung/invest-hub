@@ -417,13 +417,13 @@ function Sidebar({
   onLogout: () => void;
 }) {
   const secondaryItems: Array<{ label: string; icon: ElementType; target: ViewKey; active: boolean; badge?: string }> = [
-    { label: "AI 분석", icon: BarChart3, target: "ai", active: active === "ai" },
-    { label: "리밸런싱 추천", icon: RefreshCw, target: "rebalance", active: active === "rebalance" },
-    { label: "배당 캘린더", icon: Gift, target: "dividend", active: active === "dividend" },
-    { label: "세금/절세", icon: CircleDollarSign, target: "tax", active: active === "tax" },
-    { label: "시장 지표", icon: Globe2, target: "market", active: active === "market" },
-    { label: "알림 센터", icon: Bell, target: "alerts", active: active === "alerts", badge: "3" },
-    { label: "업로드 관리", icon: Upload, target: "upload", active: active === "upload" },
+    // { label: "AI 분석", icon: BarChart3, target: "ai", active: active === "ai" },
+    // { label: "리밸런싱 추천", icon: RefreshCw, target: "rebalance", active: active === "rebalance" },
+    // { label: "배당 캘린더", icon: Gift, target: "dividend", active: active === "dividend" },
+    // { label: "세금/절세", icon: CircleDollarSign, target: "tax", active: active === "tax" },
+    // { label: "시장 지표", icon: Globe2, target: "market", active: active === "market" },
+    // { label: "알림 센터", icon: Bell, target: "alerts", active: active === "alerts", badge: "3" },
+    // { label: "업로드 관리", icon: Upload, target: "upload", active: active === "upload" },
     { label: "설정", icon: Settings, target: "settings", active: active === "settings" }
   ];
 

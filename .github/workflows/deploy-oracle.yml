@@ -1,0 +1,131 @@
+name: Deploy to Oracle
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: oracle-production
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Build apps
+        run: npm run build
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+
+    env:
+      ORACLE_HOST: ${{ secrets.ORACLE_HOST }}
+      ORACLE_USER: ${{ secrets.ORACLE_USER }}
+      ORACLE_APP_DIR: ${{ secrets.ORACLE_APP_DIR || '/opt/invest-hub' }}
+      ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deployment secrets
+        run: |
+          set -euo pipefail
+          test -n "$ORACLE_HOST"
+          test -n "$ORACLE_USER"
+          test -n "$ORACLE_SSH_PRIVATE_KEY"
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$ORACLE_SSH_PRIVATE_KEY" > ~/.ssh/oracle_deploy_key
+          chmod 600 ~/.ssh/oracle_deploy_key
+          ssh-keyscan -H "$ORACLE_HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync source to Oracle server
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/oracle_deploy_key -o IdentitiesOnly=yes "$ORACLE_USER@$ORACLE_HOST" "mkdir -p '$ORACLE_APP_DIR'"
+          rsync -az --delete \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='**/node_modules' \
+            --exclude='.next' \
+            --exclude='**/.next' \
+            --exclude='dist' \
+            --exclude='**/dist' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='Caddyfile' \
+            --exclude='docker-compose.oracle.yml' \
+            --exclude='tmp-*' \
+            --exclude='.DS_Store' \
+            -e "ssh -i ~/.ssh/oracle_deploy_key -o IdentitiesOnly=yes" \
+            ./ "$ORACLE_USER@$ORACLE_HOST:$ORACLE_APP_DIR/"
+
+      - name: Rebuild and restart containers
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/oracle_deploy_key -o IdentitiesOnly=yes "$ORACLE_USER@$ORACLE_HOST" "APP_DIR='$ORACLE_APP_DIR' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$APP_DIR"
+
+          if [ ! -f .env ]; then
+            echo "Missing $APP_DIR/.env"
+            exit 1
+          fi
+
+          cat > Caddyfile <<'CADDY'
+          :80 {
+            @api path /auth* /api* /portfolio* /prices* /brokers* /settings* /uploads* /rebalance*
+            reverse_proxy @api api:4000
+            reverse_proxy web:3000
+          }
+          CADDY
+
+          cat > docker-compose.oracle.yml <<'YAML'
+          services:
+            caddy:
+              image: caddy:2-alpine
+              container_name: invest-hub-caddy
+              restart: unless-stopped
+              depends_on:
+                - web
+                - api
+              ports:
+                - "80:80"
+              volumes:
+                - ./Caddyfile:/etc/caddy/Caddyfile:ro
+          YAML
+
+          sudo docker compose -f docker-compose.yml -f docker-compose.oracle.yml up -d --build
+          sudo docker compose -f docker-compose.yml -f docker-compose.oracle.yml ps
+          REMOTE
+
+      - name: Check deployed app
+        run: |
+          set -euo pipefail
+          curl --fail --retry 10 --retry-delay 3 --max-time 20 "http://$ORACLE_HOST/login" >/dev/null

@@ -40,6 +40,7 @@ export class KakaoStrategy {
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("state", state);
+    url.searchParams.set("scope", process.env.KAKAO_SCOPE?.trim() || "account_email");
     return url.toString();
   }
 

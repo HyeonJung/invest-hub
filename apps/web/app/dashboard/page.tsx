@@ -4176,14 +4176,14 @@ function BrokerServiceIcon({ broker }: { broker: BrokerKey }) {
   if (broker === "TOSS") {
     return (
       <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#EFF6FF] p-2">
-        <img src="/brokers/toss-symbol-primary.png" alt="" className="h-full w-full object-contain" loading="lazy" />
+        <img src="/broker-icons/toss-symbol-primary.png" alt="" className="h-full w-full object-contain" loading="lazy" />
       </span>
     );
   }
   if (broker === "KIWOOM") {
     return (
       <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#FDF2F8] p-2">
-        <img src="/brokers/kiwoom-ci-symbol.png" alt="" className="h-full w-full object-contain" loading="lazy" />
+        <img src="/broker-icons/kiwoom-ci-symbol.png" alt="" className="h-full w-full object-contain" loading="lazy" />
       </span>
     );
   }
@@ -5524,8 +5524,8 @@ function brokerGroupIcon(broker: BrokerKey) {
 
 function brokerGroupIconSrc(broker: BrokerKey) {
   const icons: Partial<Record<BrokerKey, string>> = {
-    TOSS: "/brokers/toss-symbol-primary.png",
-    KIWOOM: "/brokers/kiwoom-ci-symbol.png"
+    TOSS: "/broker-icons/toss-symbol-primary.png",
+    KIWOOM: "/broker-icons/kiwoom-ci-symbol.png"
   };
   return icons[broker];
 }

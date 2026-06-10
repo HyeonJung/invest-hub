@@ -8,7 +8,6 @@ export type ProfitStickerMode = "image" | "emoji" | "hidden";
 export type LossStickerBadgeProps = {
   profitLossRate: number;
   mode?: LossStickerMode;
-  maxCount?: number;
   size?: "sm" | "md";
 };
 
@@ -31,59 +30,42 @@ const PROFIT_BURGER_EMOJI = "🍔";
 export function LossStickerBadge({
   profitLossRate,
   mode = DEFAULT_LOSS_STICKER_MODE,
-  maxCount = 5,
   size = "sm"
 }: LossStickerBadgeProps) {
   if (mode === "hidden" || !Number.isFinite(profitLossRate) || profitLossRate > -5) return null;
 
-  const stickerCount = Math.min(maxCount, Math.floor(Math.abs(profitLossRate) / 5));
+  const stickerCount = Math.floor(Math.abs(profitLossRate) / 5);
   if (stickerCount <= 0) return null;
 
-  const visibleMobileCount = Math.min(3, stickerCount);
-  const hiddenMobileCount = stickerCount - visibleMobileCount;
-  const itemSizeClass = size === "md" ? "h-8 w-8" : "h-7 w-7";
-  const emojiSizeClass = size === "md" ? "text-[17px]" : "text-[15px]";
-  const title = `손실률 ${formatPercent(profitLossRate)} · -5%당 경고 스티커 1개 · 현재 ${stickerCount}개 표시`;
+  const itemSizeClass = size === "md" ? "h-6 w-6" : "h-5 w-5";
+  const emojiSizeClass = size === "md" ? "text-[16px]" : "text-[14px]";
+  const textSizeClass = size === "md" ? "text-[12px]" : "text-[11px]";
+  const title = `손실률 ${formatPercent(profitLossRate)} · -5%당 경고 스티커 1개 · 현재 x${stickerCount}`;
 
   return (
     <span
       className={cn(
-        "inline-flex max-w-full shrink-0 items-center gap-1 overflow-hidden rounded-full border align-middle opacity-95 transition group-hover:opacity-100",
+        "inline-flex max-w-full shrink-0 items-center gap-1 overflow-hidden whitespace-nowrap rounded-full border align-middle opacity-95 transition group-hover:opacity-100",
         "border-blue-100 bg-blue-50 text-blue-700 shadow-[0_4px_12px_rgba(59,130,246,0.08)]",
         "dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-100",
-        size === "md" ? "px-2 py-1" : "px-1.5 py-0.5"
+        size === "md" ? "px-2 py-0.5" : "px-1.5 py-0.5"
       )}
       aria-label={title}
       title={title}
     >
-      {Array.from({ length: stickerCount }).map((_, index) => {
-        const mobileVisibility = index >= visibleMobileCount ? "hidden sm:inline-block" : "";
-
-        if (mode === "emoji") {
-          return (
-            <span
-              key={`loss-emoji-${index}`}
-              className={cn("leading-none transition-transform hover:scale-110", emojiSizeClass, mobileVisibility)}
-              aria-hidden="true"
-            >
-              {LOSS_STICKER_EMOJI}
-            </span>
-          );
-        }
-
-        return (
-          <img
-            key={`loss-image-${index}`}
-            src={LOSS_STICKER_IMAGE_SRC}
-            alt=""
-            loading="lazy"
-            className={cn("shrink-0 rounded-full object-cover transition-transform hover:scale-110", itemSizeClass, mobileVisibility)}
-          />
-        );
-      })}
-      {hiddenMobileCount > 0 ? (
-        <span className="numeric ml-0.5 text-[10px] font-black leading-none sm:hidden">+{hiddenMobileCount}</span>
-      ) : null}
+      {mode === "emoji" ? (
+        <span className={cn("shrink-0 leading-none transition-transform hover:scale-110", emojiSizeClass)} aria-hidden="true">
+          {LOSS_STICKER_EMOJI}
+        </span>
+      ) : (
+        <img
+          src={LOSS_STICKER_IMAGE_SRC}
+          alt=""
+          loading="lazy"
+          className={cn("shrink-0 rounded-full object-cover transition-transform hover:scale-110", itemSizeClass)}
+        />
+      )}
+      <span className={cn("numeric font-black leading-none text-blue-700 dark:text-blue-100", textSizeClass)}>x{stickerCount}</span>
     </span>
   );
 }

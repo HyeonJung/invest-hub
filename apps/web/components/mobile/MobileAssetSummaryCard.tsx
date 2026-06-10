@@ -2,9 +2,9 @@
 
 import type { PortfolioSummary } from "@/lib/api";
 import { cn, formatKrw } from "@/lib/utils";
-import { formatPercentMobile, formatSignedKrwMobile, safeNumber } from "@/components/mobile/mobile-utils";
+import { formatMobileDateTime, formatPercentMobile, formatSignedKrwMobile, safeNumber } from "@/components/mobile/mobile-utils";
 
-export function MobileAssetSummaryCard({ summary }: { summary: PortfolioSummary }) {
+export function MobileAssetSummaryCard({ summary, lastUpdatedAt }: { summary: PortfolioSummary; lastUpdatedAt?: string | null }) {
   const movement = summary.todayAssetMovement ?? {
     stockImpact: 0,
     fxImpact: summary.metrics.fxImpactAmount ?? 0,
@@ -16,10 +16,11 @@ export function MobileAssetSummaryCard({ summary }: { summary: PortfolioSummary 
   const todayRate = (safeNumber(movement.totalChange) / Math.max(1, summary.metrics.totalMarketValue - movement.totalChange)) * 100;
 
   return (
-    <section className="overflow-hidden rounded-[24px] border border-[#E5EAF0] bg-white p-5 shadow-[0_16px_42px_rgba(15,23,42,0.06)]">
+    <section className="overflow-hidden rounded-[20px] border border-[#E5EAF0] bg-white p-5 shadow-[0_16px_42px_rgba(15,23,42,0.06)]">
       <div className="min-w-0">
-        <p className="text-[13px] font-black text-[#64748B]">내 총 자산</p>
-        <p className="numeric mt-3 max-w-full overflow-hidden text-ellipsis text-[clamp(28px,8vw,34px)] font-black leading-tight tracking-[-0.03em] text-[#0F172A]">
+        <p className="text-[15px] font-black text-[#0F172A]">내 총 자산</p>
+        <p className="mt-3 text-[12px] font-bold text-[#64748B]">총 평가금액</p>
+        <p className="numeric mt-1 max-w-full overflow-hidden text-ellipsis text-[clamp(28px,8vw,36px)] font-black leading-tight tracking-[-0.03em] text-[#0F172A]">
           {formatKrw(summary.metrics.totalMarketValue)}
         </p>
         <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -35,6 +36,9 @@ export function MobileAssetSummaryCard({ summary }: { summary: PortfolioSummary 
         <MobileMovementPill label="오늘" value={movement.totalChange} positive={todayPositive} />
         <MobileMovementPill label="전일 대비" value={todayRate} positive={todayRate >= 0} isPercent />
       </div>
+      <p className="mt-4 text-[12px] font-bold text-[#94A3B8]">
+        마지막 갱신 <span className="numeric text-[#64748B]">{formatMobileDateTime(lastUpdatedAt)}</span>
+      </p>
     </section>
   );
 }
@@ -43,7 +47,7 @@ function MobileMovementPill({ label, value, positive, isPercent = false }: { lab
   return (
     <div className="min-w-0 rounded-2xl bg-[#F8FAFC] px-3 py-3">
       <p className="text-[12px] font-black text-[#64748B]">{label}</p>
-      <p className={cn("numeric mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-black", positive ? "text-[#16A34A]" : "text-[#EF4444]")}>
+      <p className={cn("numeric mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-black", positive ? "text-[#16A34A]" : "text-[#2563EB]")}>
         {isPercent ? formatPercentMobile(value) : formatSignedKrwMobile(value)}
       </p>
     </div>

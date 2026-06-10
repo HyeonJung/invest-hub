@@ -165,8 +165,8 @@ export function MobileAppShell({
           data={portfolioData}
           marketLoading={marketQuery.isFetching}
           marketError={(marketQuery.error as Error | null) ?? null}
+          priceStatus={priceQuery.data}
           onSelectHolding={setSelectedHolding}
-          onConnect={openConnect}
         />
       ) : null}
       {initialView === "accounts" ? <MobileAccountList accounts={portfolioData.accounts} onConnect={openConnect} /> : null}

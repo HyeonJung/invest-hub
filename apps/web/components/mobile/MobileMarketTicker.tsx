@@ -33,8 +33,8 @@ export function MobileMarketTicker({
       <div className="-mx-4 overflow-x-auto px-4 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="flex min-w-0 gap-3">
           {indicators.length === 0
-            ? Array.from({ length: 5 }).map((_, index) => (
-                <div key={index} className="h-[86px] w-[132px] shrink-0 animate-pulse rounded-[18px] border border-[#E5EAF0] bg-white" />
+            ? Array.from({ length: 6 }).map((_, index) => (
+                <div key={index} className="h-[82px] w-[140px] shrink-0 animate-pulse rounded-[18px] border border-[#E5EAF0] bg-white" />
               ))
             : indicators.map((indicator) =>
                 indicator.symbol === "FEAR_GREED" ? (
@@ -60,7 +60,7 @@ function MobileMarketTickerCard({ indicator }: { indicator: MarketIndicatorsResu
   const statusMeta = getMobileIndicatorStatusMeta(indicator);
 
   return (
-    <article className="relative h-[86px] w-[132px] shrink-0 overflow-hidden rounded-[18px] border border-[#E5EAF0] bg-white p-3 shadow-sm">
+    <article className="relative h-[82px] w-[140px] shrink-0 overflow-hidden rounded-[18px] border border-[#E5EAF0] bg-white p-3 shadow-sm">
       <div className="flex h-full min-w-0 flex-col justify-between">
         <div className="flex min-w-0 items-start justify-between gap-2">
           <p className="min-w-0 truncate text-[11px] font-black uppercase text-[#64748B]">{compactMobileIndicatorName(indicator.name, indicator.symbol)}</p>
@@ -91,7 +91,7 @@ function MobileFearGreedTickerCard({ indicator }: { indicator: MarketIndicatorsR
   const meta = getFearGreedMeta(indicator.value);
 
   return (
-    <article className="relative h-[86px] w-[132px] shrink-0 overflow-hidden rounded-[18px] border bg-white p-3 shadow-sm" style={{ borderColor: `${meta.color}35` }}>
+    <article className="relative h-[82px] w-[140px] shrink-0 overflow-hidden rounded-[18px] border bg-white p-3 shadow-sm" style={{ borderColor: `${meta.color}35` }}>
       <div className="flex h-full min-w-0 items-center gap-2">
         <FearGreedBadge value={indicator.value} size="sm" showValue={false} showLabel={false} />
         <div className="min-w-0 flex-1">

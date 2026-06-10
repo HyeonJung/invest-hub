@@ -181,7 +181,7 @@ export function assetAllocationFromMobileHoldings(holdings: Holding[]): ChartDat
 }
 
 export function selectMobileMarketIndicators(indicators: MarketIndicator[]) {
-  const order = ["USD_KRW", "FEAR_GREED", "SPX", "NASDAQ100", "NDX", "WTI", "VIX", "BTC"];
+  const order = ["KOSPI", "KOSDAQ", "SPX", "NASDAQ100", "NDX", "WTI", "USD_KRW"];
   const seen = new Set<string>();
 
   return [...indicators]
@@ -233,6 +233,17 @@ export function formatMobileDateTime(value?: string | null) {
   }).format(new Date(value));
 }
 
+export function getLatestMobileHoldingPriceUpdatedAt(holdings: Holding[]) {
+  const latest = holdings
+    .map((holding) => holding.priceUpdatedAt)
+    .filter(Boolean)
+    .map((value) => new Date(value as string))
+    .filter((date) => !Number.isNaN(date.getTime()))
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+
+  return latest?.toISOString() ?? null;
+}
+
 export function formatMobileIndicatorValue(indicator: MarketIndicator) {
   if (indicator.symbol === "USD_KRW") return `${indicator.value.toLocaleString("ko-KR", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}원`;
   if (indicator.unit === "USD") return `$${indicator.value.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
@@ -243,11 +254,13 @@ export function formatMobileIndicatorValue(indicator: MarketIndicator) {
 
 export function compactMobileIndicatorName(name: string, symbol: string) {
   const names: Record<string, string> = {
+    KOSPI: "KOSPI",
+    KOSDAQ: "KOSDAQ",
     USD_KRW: "USD/KRW",
     FEAR_GREED: "공포탐욕",
     SPX: "S&P 500",
-    NASDAQ100: "NASDAQ",
-    NDX: "NASDAQ",
+    NASDAQ100: "NASDAQ 100",
+    NDX: "NASDAQ 100",
     WTI: "WTI",
     VIX: "VIX",
     BTC: "비트코인"

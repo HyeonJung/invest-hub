@@ -3,9 +3,7 @@
 import { Loader2 } from "lucide-react";
 import type { MarketIndicatorsResult } from "@/lib/api";
 import { FearGreedBadge, getFearGreedMeta } from "@/components/fear-greed-badge";
-import { MobileSparkline } from "@/components/mobile/MobileSparkline";
 import {
-  buildMobileIndicatorSparkline,
   compactMobileIndicatorName,
   formatMobileIndicatorValue,
   selectMobileMarketIndicators
@@ -36,7 +34,7 @@ export function MobileMarketTicker({
         <div className="flex min-w-0 gap-3">
           {indicators.length === 0
             ? Array.from({ length: 5 }).map((_, index) => (
-                <div key={index} className="h-[78px] w-[132px] shrink-0 animate-pulse rounded-[18px] border border-[#E5EAF0] bg-white" />
+                <div key={index} className="h-[86px] w-[132px] shrink-0 animate-pulse rounded-[18px] border border-[#E5EAF0] bg-white" />
               ))
             : indicators.map((indicator) =>
                 indicator.symbol === "FEAR_GREED" ? (
@@ -57,33 +55,43 @@ export function MobileMarketTicker({
 }
 
 function MobileMarketTickerCard({ indicator }: { indicator: MarketIndicatorsResult["indicators"][number] }) {
-  const positive = indicator.changeRate >= 0;
-  const sparkline = buildMobileIndicatorSparkline(indicator);
+  const positive = indicator.changeRate > 0;
+  const negative = indicator.changeRate < 0;
+  const statusMeta = getMobileIndicatorStatusMeta(indicator);
 
   return (
-    <article className="relative h-[78px] w-[132px] shrink-0 overflow-hidden rounded-[18px] border border-[#E5EAF0] bg-white p-3 shadow-sm">
-      <div className="relative z-10 min-w-0">
-        <p className="truncate text-[11px] font-black uppercase text-[#64748B]">{compactMobileIndicatorName(indicator.name, indicator.symbol)}</p>
+    <article className="relative h-[86px] w-[132px] shrink-0 overflow-hidden rounded-[18px] border border-[#E5EAF0] bg-white p-3 shadow-sm">
+      <div className="flex h-full min-w-0 flex-col justify-between">
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <p className="min-w-0 truncate text-[11px] font-black uppercase text-[#64748B]">{compactMobileIndicatorName(indicator.name, indicator.symbol)}</p>
+          <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black leading-none", statusMeta.className)}>{statusMeta.label}</span>
+        </div>
         <p className="numeric mt-1 max-w-[102px] overflow-hidden text-ellipsis whitespace-nowrap text-[17px] font-black leading-5 text-[#0F172A]">
           {formatMobileIndicatorValue(indicator)}
         </p>
-        <p className={cn("numeric mt-1 max-w-[62px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-black", positive ? "text-[#EF4444]" : "text-[#2563EB]")}>
-          {indicator.changeRate > 0 ? "+" : ""}
-          {indicator.changeRate.toFixed(2)}%
+        <p className={cn("numeric max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-black", positive ? "text-[#EF4444]" : negative ? "text-[#2563EB]" : "text-[#64748B]")}>
+          {positive ? "▲ +" : negative ? "▼ -" : "— "}
+          {Math.abs(indicator.changeRate).toFixed(2)}%
         </p>
-      </div>
-      <div className="pointer-events-none absolute bottom-2 right-2 h-[28px] w-[70px] overflow-hidden">
-        <MobileSparkline values={sparkline} positive={positive} />
       </div>
     </article>
   );
+}
+
+function getMobileIndicatorStatusMeta(indicator: MarketIndicatorsResult["indicators"][number]) {
+  if (indicator.isDelayed || indicator.status === "DELAYED") {
+    return { label: "지연", className: "bg-orange-50 text-orange-700" };
+  }
+  if (indicator.changeRate > 0) return { label: "상승", className: "bg-red-50 text-red-600" };
+  if (indicator.changeRate < 0) return { label: "하락", className: "bg-blue-50 text-blue-600" };
+  return { label: "중립", className: "bg-slate-100 text-slate-600" };
 }
 
 function MobileFearGreedTickerCard({ indicator }: { indicator: MarketIndicatorsResult["indicators"][number] }) {
   const meta = getFearGreedMeta(indicator.value);
 
   return (
-    <article className="relative h-[78px] w-[132px] shrink-0 overflow-hidden rounded-[18px] border bg-white p-3 shadow-sm" style={{ borderColor: `${meta.color}35` }}>
+    <article className="relative h-[86px] w-[132px] shrink-0 overflow-hidden rounded-[18px] border bg-white p-3 shadow-sm" style={{ borderColor: `${meta.color}35` }}>
       <div className="flex h-full min-w-0 items-center gap-2">
         <FearGreedBadge value={indicator.value} size="sm" showValue={false} showLabel={false} />
         <div className="min-w-0 flex-1">

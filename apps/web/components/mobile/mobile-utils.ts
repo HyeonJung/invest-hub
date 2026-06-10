@@ -196,32 +196,6 @@ export function selectMobileMarketIndicators(indicators: MarketIndicator[]) {
     .slice(0, 6);
 }
 
-export function buildMobileIndicatorSparkline(indicator: MarketIndicator) {
-  const current = safeNumber(indicator.value);
-  const change = safeNumber(indicator.change);
-  if (!current || Math.abs(change) < 0.000001) return [];
-
-  const previous = current - change;
-  const amplitude = Math.max(Math.abs(change) * 0.28, Math.abs(current) * 0.0006);
-  const direction = change >= 0 ? 1 : -1;
-
-  return Array.from({ length: 10 }).map((_, index) => {
-    const t = index / 9;
-    const trend = previous + change * t;
-    const curve = Math.sin(t * Math.PI * 2.2) * amplitude * direction;
-    return trend + curve;
-  });
-}
-
-export function buildMobileAssetTrend(totalValue: number, todayChange: number) {
-  const base = Math.max(1, safeNumber(totalValue));
-  const change = safeNumber(todayChange);
-  const start = Math.max(1, base - change - base * 0.01);
-  const pattern = [0, -0.01, 0.004, -0.003, 0.012, 0.008, 0.019, 0.015, 0.028, 0.034, 0.031, 0.046];
-
-  return pattern.map((point, index) => start + (base - start) * (index / (pattern.length - 1)) + base * 0.018 * point);
-}
-
 export function formatSignedKrwMobile(value: number) {
   const prefix = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${prefix}${formatKrw(Math.abs(value))}`;

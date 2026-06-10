@@ -184,16 +184,46 @@ export class PricesService {
         broker: "TOSS",
         status: "ACTIVE"
       },
-      select: { id: true }
+      select: { id: true },
+      orderBy: { updatedAt: "desc" }
     });
     if (!credential) return null;
 
     try {
       return await this.tossOpenApiService.syncHoldings(userId);
     } catch (error) {
-      errors.push(`토스 현재가 갱신 실패. 마지막 성공 가격을 유지합니다. ${(error as Error).message}`);
+      const message = (error as Error).message;
+      if (isTossAuthError(message)) {
+        await this.markTossCredentialError(userId, credential.id, message);
+        errors.push("토스 현재가 갱신 실패. 토스증권 API 인증이 만료되었거나 권한이 유효하지 않아 자동 갱신을 중지했습니다. 설정에서 토스 API 정보를 다시 저장한 뒤 동기화하세요.");
+      } else {
+        errors.push(`토스 현재가 갱신 실패. 마지막 성공 가격을 유지합니다. ${message}`);
+      }
       return null;
     }
+  }
+
+  private async markTossCredentialError(userId: string, credentialId: string, message: string) {
+    const failedAt = new Date();
+    await this.prisma.$transaction([
+      this.prisma.accountApiCredential.updateMany({
+        where: { id: credentialId, userId, broker: "TOSS" },
+        data: {
+          status: "ERROR",
+          lastUsedAt: failedAt,
+          metadata: {
+            provider: "toss-open-api",
+            storage: "account",
+            lastError: message,
+            failedAt: failedAt.toISOString()
+          }
+        }
+      }),
+      this.prisma.brokerConnection.updateMany({
+        where: { userId, broker: "TOSS" },
+        data: { status: "ERROR" }
+      })
+    ]);
   }
 
   private async getFreshCachedQuotes(securities: Security[], intervalMs: number, usdKrwRate: number) {
@@ -462,6 +492,16 @@ function canFetchQuote(security: Security) {
   if (security.marketCountry === "US") return /^[A-Z.]{1,8}$/.test(security.symbol);
   if (security.marketCountry === "KR") return /^\d{6}$/.test(security.symbol);
   return false;
+}
+
+function isTossAuthError(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("invalid-token") ||
+    normalized.includes("http 401") ||
+    normalized.includes("unauthorized") ||
+    normalized.includes("토큰 발급에 실패")
+  );
 }
 
 function yahooSymbolsFor(security: Security) {

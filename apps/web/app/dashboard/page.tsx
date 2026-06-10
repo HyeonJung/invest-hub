@@ -41,20 +41,7 @@ import {
   Wallet,
   X
 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useRouter } from "next/navigation";
 import {
   api,
@@ -1022,7 +1009,11 @@ function Overview({
       transition={{ duration: 0.45, ease: "easeOut" }}
     >
       <div className="min-w-0 space-y-6">
-        <OverviewHero data={data} />
+        <OverviewHero
+          data={data}
+          lastUpdatedAt={priceStatus?.lastSuccessAt ?? marketIndicators?.lastSuccessAt}
+          dataSource={priceStatus?.source ?? marketIndicators?.indicators[0]?.source ?? "보유 종목 현재가"}
+        />
         <MarketIndicatorsWidget data={marketIndicators} loading={marketIndicatorsLoading} error={marketIndicatorsError} onMore={() => onNavigate("market")} mode="overview" />
         <section className="grid min-w-0 gap-5 xl:grid-cols-2 min-[1440px]:grid-cols-3">
           <AllocationCard title="자산 구성 비중" data={assetAllocationFromHoldings(data.holdings)} center={formatKrw(data.metrics.totalMarketValue)} />
@@ -1048,8 +1039,15 @@ function AccountDashboard({ account }: { account: AccountNavigationItem }) {
   );
 }
 
-function OverviewHero({ data }: { data: PortfolioSummary }) {
-  const [selectedRange, setSelectedRange] = useState("1W");
+function OverviewHero({
+  data,
+  lastUpdatedAt,
+  dataSource
+}: {
+  data: PortfolioSummary;
+  lastUpdatedAt?: string | null;
+  dataSource?: string | null;
+}) {
   const movement = data.todayAssetMovement ?? {
     stockImpact: 0,
     fxImpact: data.metrics.fxImpactAmount ?? 0,
@@ -1058,12 +1056,9 @@ function OverviewHero({ data }: { data: PortfolioSummary }) {
   };
   const profitTone = data.metrics.totalProfitLoss >= 0 ? "text-[#EF4444]" : "text-[#3B82F6]";
   const todayTone = movement.totalChange >= 0 ? "text-[#16A34A]" : "text-[#EF4444]";
-  const heroChart = buildHeroChartData(data.metrics.totalMarketValue, movement.totalChange);
-  const values = heroChart.map((item) => item.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const padding = (max - min) * 0.15 || Math.max(1, max * 0.05);
   const todayRate = (movement.totalChange / Math.max(1, data.metrics.totalMarketValue - movement.totalChange)) * 100;
+  const basisTime = lastUpdatedAt ?? getLatestHoldingPriceUpdatedAt(data.holdings);
+  const dataBasis = dataSource ?? "보유 종목 현재가";
 
   return (
     <motion.div
@@ -1074,7 +1069,7 @@ function OverviewHero({ data }: { data: PortfolioSummary }) {
       transition={{ duration: 0.55, ease: "easeOut" }}
     >
       <section className="hero-card min-h-[280px] min-w-0 overflow-hidden rounded-[20px] border border-[#E5EAF0] bg-white p-6 shadow-sm" data-hero-card>
-        <div className="grid h-full min-w-0 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="grid h-full min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
           <div className="flex min-w-0 flex-col justify-between overflow-hidden py-1" data-hero-summary>
             <div className="min-w-0">
               <p className="text-[16px] font-black text-[#0F172A]">내 총 자산</p>
@@ -1097,36 +1092,15 @@ function OverviewHero({ data }: { data: PortfolioSummary }) {
             </div>
           </div>
 
-          <div className="relative min-h-[220px] min-w-0 overflow-hidden" data-hero-chart>
-            <div className="absolute right-0 top-0 z-10 flex items-center gap-1 text-[13px] font-bold text-[#475569]">
-              {["1D", "1W", "1M", "3M", "1Y"].map((range) => (
-                <button
-                  key={range}
-                  type="button"
-                  className={cn(
-                    "h-8 rounded-lg px-3 transition",
-                    selectedRange === range ? "bg-[#EFF6FF] text-[#2563EB] shadow-sm ring-1 ring-[#D9E7FF]" : "text-[#475569] hover:bg-[#F1F5F9]"
-                  )}
-                  onClick={() => setSelectedRange(range)}
-                >
-                  {range}
-                </button>
-              ))}
+          <div className="flex min-w-0 flex-col justify-end rounded-[18px] border border-[#E5EAF0] bg-[#F8FAFC] p-4" data-hero-data-summary>
+            <div className="mb-5">
+              <p className="text-[13px] font-black text-[#64748B]">데이터 요약</p>
+              <p className="mt-1 text-[12px] font-bold leading-5 text-[#94A3B8]">보유 종목 현재가와 마지막 갱신 정보를 기준으로 계산했습니다.</p>
             </div>
-            <div className="h-[220px] min-w-0 pt-10">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={heroChart} margin={{ top: 12, right: 10, bottom: 8, left: 10 }}>
-                  <defs>
-                    <linearGradient id="assetGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.22} />
-                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="name" hide />
-                  <YAxis hide domain={[min - padding, max + padding]} />
-                  <Area type="monotone" dataKey="value" stroke="#2563EB" strokeWidth={3} fill="url(#assetGradient)" dot={false} activeDot={false} isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
+            <div className="space-y-3">
+              <HeroInfoRow label="전일 대비" value={formatPercent(todayRate)} tone={todayRate >= 0 ? "positive" : "negative"} />
+              <HeroInfoRow label="마지막 갱신" value={formatDataBasisTime(basisTime)} />
+              <HeroInfoRow label="데이터 기준" value={dataBasis} />
             </div>
           </div>
         </div>
@@ -1141,9 +1115,34 @@ function OverviewHero({ data }: { data: PortfolioSummary }) {
           <HeroMovementRow label="환율 영향" value={movement.fxImpact} />
           <HeroMovementRow label="배당 영향" value={movement.dividendImpact} />
         </div>
-        <p className="mt-7 text-[13px] font-medium text-[#64748B]">조회 시간 {formatHeaderTime(new Date().toISOString())} 기준</p>
+        <p className="mt-7 text-[13px] font-medium text-[#64748B]">가격 기준 {formatDataBasisTime(basisTime)}</p>
       </section>
     </motion.div>
+  );
+}
+
+function HeroInfoRow({
+  label,
+  value,
+  tone
+}: {
+  label: string;
+  value: string;
+  tone?: "positive" | "negative";
+}) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden rounded-2xl bg-white px-3 py-3">
+      <span className="shrink-0 text-[12px] font-black text-[#64748B]">{label}</span>
+      <span
+        className={cn(
+          "numeric min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-right text-[13px] font-black text-[#0F172A]",
+          tone === "positive" && "text-[#16A34A]",
+          tone === "negative" && "text-[#EF4444]"
+        )}
+      >
+        {value}
+      </span>
+    </div>
   );
 }
 
@@ -1238,7 +1237,7 @@ function MarketIndicatorsWidget({
           <h2 className="text-[20px] font-black leading-none text-[#0F172A] dark:text-[var(--text-primary)]">시장 주요 지표</h2>
         </div>
         <div className="flex shrink-0 items-center gap-3 text-[12px] font-bold text-[#64748B] dark:text-[var(--text-secondary)]">
-          {mode === "full" ? <span className="numeric">{formatHeaderTime(data?.lastSuccessAt)} 기준</span> : null}
+          {data?.lastSuccessAt ? <span className="numeric">{formatHeaderTime(data.lastSuccessAt)} 기준</span> : null}
           {loading ? <Loader2 className="h-4 w-4 animate-spin text-[#3B82F6]" /> : <CheckCircle2 className="h-4 w-4 text-[#22C55E]" />}
           <button className="flex h-8 items-center gap-1 rounded-lg border border-[#E5EAF0] bg-white px-3 text-[12px] font-bold text-[#64748B] shadow-sm transition hover:bg-[#F8FAFC] hover:text-[#0F172A]" onClick={onMore ?? (() => alert("시장 지표 화면에서 전체 지표를 확인할 수 있습니다."))}>
             전체 보기
@@ -1279,26 +1278,37 @@ function MarketIndicatorCard({ indicator, className }: { indicator: MarketIndica
 
   const positive = indicator.changeRate > 0;
   const negative = indicator.changeRate < 0;
+  const directionIcon = positive ? "▲" : negative ? "▼" : "—";
   const changePrefix = positive ? "+" : negative ? "-" : "";
-  const sparklineData = buildIndicatorSparklineData(indicator);
+  const statusMeta = getMarketIndicatorStatusMeta(indicator);
+  const history = getReliableIndicatorHistory(indicator);
 
   return (
     <motion.div
-      className={cn("market-indicator-card relative h-[88px] overflow-hidden rounded-[14px] border border-[#E5EAF0] bg-white p-3.5 shadow-none", className)}
+      className={cn("market-indicator-card relative h-[96px] overflow-hidden rounded-[14px] border border-[#E5EAF0] bg-white p-3.5 shadow-none", className)}
       data-market-indicator-card
       whileHover={{ y: -2, backgroundColor: "#F8FAFC" }}
       transition={{ duration: 0.18 }}
     >
-      <div className="relative z-10 min-w-0">
-        <p className="truncate text-[12px] font-bold uppercase leading-4 text-[#64748B]">{compactIndicatorName(indicator.name, indicator.symbol)}</p>
-        <p className="numeric mt-1 block max-w-[118px] overflow-hidden text-ellipsis text-[18px] font-black leading-[21px] text-[#0F172A]">{formatMarketIndicatorValue(indicator)}</p>
-        <p className={cn("numeric mt-1 max-w-[72px] overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-black leading-4", positive ? "text-[#EF4444]" : negative ? "text-[#2563EB]" : "text-[#64748B]")}>
-          {changePrefix}{Math.abs(indicator.changeRate).toFixed(2)}%
-        </p>
+      <div className="relative z-10 flex h-full min-w-0 flex-col justify-between">
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <p className="min-w-0 truncate text-[12px] font-bold uppercase leading-4 text-[#64748B]">{compactIndicatorName(indicator.name, indicator.symbol)}</p>
+          <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none", statusMeta.className)}>{statusMeta.label}</span>
+        </div>
+        <div className="min-w-0">
+          <p className="numeric block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[20px] font-black leading-[23px] text-[#0F172A]">{formatMarketIndicatorValue(indicator)}</p>
+          <p className={cn("numeric mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-black leading-4", positive ? "text-[#EF4444]" : negative ? "text-[#2563EB]" : "text-[#64748B]")}>
+            {directionIcon} {changePrefix}
+            {formatMarketIndicatorChangeAbs(indicator)} ({changePrefix}
+            {Math.abs(indicator.changeRate).toFixed(2)}%)
+          </p>
+        </div>
       </div>
-      <div className="pointer-events-none absolute bottom-3 right-3 h-[30px] w-[70px] overflow-hidden" data-market-sparkline>
-        <Sparkline data={sparklineData} positive={indicator.changeRate >= 0} />
-      </div>
+      {history ? (
+        <div className="pointer-events-none absolute bottom-3 right-3 h-[30px] w-[70px] overflow-hidden" data-market-sparkline>
+          <Sparkline data={history} positive={indicator.changeRate >= 0} />
+        </div>
+      ) : null}
     </motion.div>
   );
 }
@@ -5648,35 +5658,6 @@ function findFearGreedIndicator(data?: MarketIndicatorsResult) {
   return data?.indicators.find((indicator) => indicator.symbol === "FEAR_GREED") ?? null;
 }
 
-function buildHeroChartData(totalValue: number, todayChange: number) {
-  const base = Math.max(1, safeNumber(totalValue));
-  const safeChange = safeNumber(todayChange);
-  const start = Math.max(1, base - safeChange - base * 0.018);
-  const pattern = [0, -0.018, -0.011, 0.009, -0.004, 0.014, 0.01, 0.032, 0.027, 0.041, 0.036, 0.058, 0.055, 0.073, 0.084, 0.079, 0.097, 0.104, 0.119, 0.126, 0.141, 0.137, 0.153, 0.151];
-
-  return pattern.map((point, index) => ({
-    name: index.toString(),
-    value: start + (base - start) * (index / (pattern.length - 1)) + base * 0.035 * point
-  }));
-}
-
-function buildIndicatorSparklineData(indicator: MarketIndicatorsResult["indicators"][number]) {
-  const current = safeNumber(indicator.value);
-  const change = safeNumber(indicator.change);
-  if (!Number.isFinite(current) || current <= 0 || Math.abs(change) < 0.000001) return [];
-
-  const previous = current - change;
-  const amplitude = Math.max(Math.abs(change) * 0.32, Math.abs(current) * 0.0008);
-  const direction = change >= 0 ? 1 : -1;
-
-  return Array.from({ length: 10 }).map((_, index) => {
-    const t = index / 9;
-    const trend = previous + change * t;
-    const curve = Math.sin(t * Math.PI * 2.4) * amplitude * (1 - Math.abs(t - 0.5) * 0.7);
-    return trend + curve * direction;
-  });
-}
-
 function buildAggregatedHoldings(data: PortfolioSummary, searchText: string, sortKey: HoldingSortKey): AggregatedHolding[] {
   const totalMarketValue = data.metrics.totalMarketValue;
   const grouped = new Map<string, AggregatedHolding>();
@@ -5875,6 +5856,17 @@ function safeNumber(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function getLatestHoldingPriceUpdatedAt(holdings: Holding[]) {
+  const latest = holdings
+    .map((holding) => holding.priceUpdatedAt)
+    .filter((value): value is string => Boolean(value))
+    .map((value) => ({ value, timestamp: new Date(value).getTime() }))
+    .filter((item) => Number.isFinite(item.timestamp))
+    .sort((a, b) => b.timestamp - a.timestamp)[0];
+
+  return latest?.value ?? null;
+}
+
 function cleanDisplayName(value: string) {
   const maskedAccount = value.match(/\d{2}\*+\d{2}/)?.[0];
   if (value.includes("?ㅼ") || value.includes("영웅문")) return maskedAccount ? `키움 ${maskedAccount}` : "키움 계좌";
@@ -5968,11 +5960,58 @@ function compactIndicatorName(name: string, symbol: string) {
   return names[symbol] ?? name.replace("원/달러 환율", "USD/KRW").replace("국제유가 ", "");
 }
 
+function getMarketIndicatorStatusMeta(indicator: MarketIndicatorsResult["indicators"][number]) {
+  if (indicator.isDelayed || indicator.status === "DELAYED") {
+    return {
+      label: "지연",
+      className: "bg-orange-50 text-orange-700"
+    };
+  }
+
+  if (indicator.changeRate > 0) {
+    return {
+      label: "상승",
+      className: "bg-red-50 text-red-600"
+    };
+  }
+
+  if (indicator.changeRate < 0) {
+    return {
+      label: "하락",
+      className: "bg-blue-50 text-blue-600"
+    };
+  }
+
+  return {
+    label: "중립",
+    className: "bg-slate-100 text-slate-600"
+  };
+}
+
 function formatMarketIndicatorChange(indicator: MarketIndicatorsResult["indicators"][number]) {
   if (indicator.symbol === "USD_KRW") return `${indicator.change.toFixed(2)}원`;
   if (indicator.unit === "USD") return `$${indicator.change.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
   if (indicator.unit === "PERCENT") return `${indicator.change.toFixed(2)}%p`;
   return indicator.change.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+}
+
+function formatMarketIndicatorChangeAbs(indicator: MarketIndicatorsResult["indicators"][number]) {
+  return formatMarketIndicatorChange({ ...indicator, change: Math.abs(indicator.change) });
+}
+
+function getReliableIndicatorHistory(indicator: MarketIndicatorsResult["indicators"][number]) {
+  const history = (indicator as MarketIndicatorsResult["indicators"][number] & { history?: unknown }).history;
+  if (!Array.isArray(history) || history.length < 10) return null;
+
+  const values = history
+    .map((item) => {
+      if (typeof item === "number") return item;
+      if (item && typeof item === "object" && "value" in item) return Number((item as { value: unknown }).value);
+      return Number.NaN;
+    })
+    .filter((value) => Number.isFinite(value));
+
+  return values.length >= 10 ? values : null;
 }
 
 function formatSignedKrw(value: number) {
@@ -6019,7 +6058,7 @@ function formatShortDateTime(value?: string | null) {
 }
 
 function formatHeaderTime(value?: string | null) {
-  if (!value) return "14:31:24";
+  if (!value) return "정보 없음";
   return new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul",
     hour: "2-digit",
@@ -6027,6 +6066,11 @@ function formatHeaderTime(value?: string | null) {
     second: "2-digit",
     hour12: false
   }).format(new Date(value));
+}
+
+function formatDataBasisTime(value?: string | null) {
+  if (!value) return "가격 갱신 정보 없음";
+  return `${formatHeaderTime(value)} 기준`;
 }
 
 function formatInterval(value?: number) {

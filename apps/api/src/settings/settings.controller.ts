@@ -136,4 +136,28 @@ export class SettingsController {
     const userId = await this.authService.userIdFromRequest(request);
     return this.settingsService.deleteNamuhCredentialProfile(userId, connectionId);
   }
+
+  @Get("upbit-credentials")
+  async listUpbitCredentials(@Req() request: Request) {
+    const userId = await this.authService.userIdFromRequest(request);
+    return this.settingsService.listUpbitCredentials(userId);
+  }
+
+  @Post("upbit-credentials")
+  async saveUpbitCredentialProfile(
+    @Body() body: { connectionId?: string; label?: string; accessKey: string; secretKey?: string },
+    @Req() request: Request
+  ) {
+    const userId = await this.authService.userIdFromRequest(request);
+    return this.settingsService.saveUpbitCredentialProfile(userId, body);
+  }
+
+  @Delete("upbit-credentials/:connectionId")
+  async deleteUpbitCredentialProfile(
+    @Param("connectionId") connectionId: string,
+    @Req() request: Request
+  ) {
+    const userId = await this.authService.userIdFromRequest(request);
+    return this.settingsService.deleteUpbitCredentialProfile(userId, connectionId);
+  }
 }

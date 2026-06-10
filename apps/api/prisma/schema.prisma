@@ -11,6 +11,7 @@ enum Broker {
   TOSS
   NAMUH
   KIWOOM
+  UPBIT
   MANUAL
 }
 
@@ -75,6 +76,8 @@ model User {
   connections    BrokerConnection[]
   accounts       InvestmentAccount[]
   accountApiKeys AccountApiCredential[]
+  cryptoHoldings CryptoHolding[]
+  cryptoCashBalances CryptoCashBalance[]
   targets        PortfolioTarget[]
   socialAccounts SocialAccount[]
 }
@@ -107,10 +110,15 @@ model BrokerConnection {
   connectionType ConnectionType
   status         ConnectionStatus @default(ACTIVE)
   lastSyncedAt   DateTime?
+  lastPriceSyncedAt DateTime?
+  errorMessage   String?
   createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @default(now()) @updatedAt
 
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   credential BrokerCredential?
+  cryptoHoldings CryptoHolding[]
+  cryptoCashBalances CryptoCashBalance[]
 }
 
 model BrokerCredential {
@@ -254,6 +262,67 @@ model Holding {
 
   account  InvestmentAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   security Security          @relation(fields: [securityId], references: [id], onDelete: Cascade)
+}
+
+model CryptoAsset {
+  id        String   @id @default(uuid())
+  symbol    String
+  market    String   @unique
+  nameKo    String?
+  nameEn    String?
+  logoUrl   String?
+  currency  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  holdings CryptoHolding[]
+}
+
+model CryptoHolding {
+  id                  String   @id @default(uuid())
+  userId              String
+  connectionId        String
+  assetId             String
+  market              String
+  symbol              String
+  currency            String
+  balance             Decimal  @db.Decimal(28, 10)
+  locked              Decimal  @db.Decimal(28, 10)
+  avgBuyPrice         Decimal  @db.Decimal(28, 8)
+  avgBuyPriceCurrency String
+  currentPrice        Decimal  @db.Decimal(28, 8)
+  marketValueKrw      Decimal  @db.Decimal(18, 2)
+  costAmountKrw       Decimal  @db.Decimal(18, 2)
+  profitLossKrw       Decimal  @db.Decimal(18, 2)
+  profitLossRate      Decimal  @db.Decimal(10, 4)
+  priceUpdatedAt      DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection BrokerConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  asset      CryptoAsset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, market])
+  @@index([userId])
+  @@index([assetId])
+}
+
+model CryptoCashBalance {
+  id           String   @id @default(uuid())
+  userId       String
+  connectionId String
+  currency     String
+  balance      Decimal  @db.Decimal(28, 10)
+  locked       Decimal  @db.Decimal(28, 10)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection BrokerConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, currency])
+  @@index([userId])
 }
 
 model PortfolioTarget {

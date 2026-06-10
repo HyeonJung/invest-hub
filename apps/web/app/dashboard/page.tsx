@@ -58,7 +58,8 @@ import {
   PortfolioSummary,
   PortfolioTargetInput,
   PriceRefreshResult,
-  TossCredentialAccount
+  TossCredentialAccount,
+  UpbitCredentialProfile
 } from "@/lib/api";
 import { cn, formatKrw, formatPercent } from "@/lib/utils";
 import { useToast } from "@/components/toast-provider";
@@ -111,7 +112,8 @@ type AccountNavigationItem = {
 const brokerLabels: Record<BrokerKey, string> = {
   TOSS: "토스증권",
   NAMUH: "나무증권",
-  KIWOOM: "키움(영웅문)"
+  KIWOOM: "키움(영웅문)",
+  UPBIT: "업비트"
 };
 
 const defaultTargets: PortfolioTargetInput[] = [
@@ -811,6 +813,7 @@ function AccountConnectionModal({
     { label: "토스증권", description: "Open API 키 저장 후 계좌와 보유종목을 동기화합니다.", icon: Wallet, destination: "settings", badge: "지원" },
     { label: "나무증권", description: "WMCA 브리지/API 설정 후 여러 계좌를 등록합니다.", icon: PieIcon, destination: "settings", badge: "지원" },
     { label: "키움증권", description: "실전/모의 App Key를 등록하고 계좌를 조회합니다.", icon: BarChart3, destination: "settings", badge: "지원" },
+    { label: "업비트", description: "조회 전용 API Key로 코인 잔고와 원화 보유금을 동기화합니다.", icon: CircleDollarSign, destination: "settings", badge: "지원" },
     { label: "한국투자", description: "향후 Broker Adapter로 추가될 증권사입니다.", icon: Building2, destination: "coming-soon" },
     { label: "미래에셋", description: "CMA, ISA, 연금 계좌 연결 확장을 고려한 슬롯입니다.", icon: Landmark, destination: "coming-soon" },
     { label: "신한투자", description: "API 문서 확인 후 연결 플로우를 추가할 수 있습니다.", icon: ShieldCheck, destination: "coming-soon" },
@@ -1030,12 +1033,103 @@ function Overview({
 }
 
 function AccountDashboard({ account }: { account: AccountNavigationItem }) {
+  if (account.broker === "UPBIT") {
+    return <CryptoAccountDashboard account={account} />;
+  }
+
   const metrics = metricsFromHoldings(account.holdings);
 
   return (
     <motion.div className="min-w-0 space-y-5" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.42, ease: "easeOut" }}>
       <TossStyleHoldingsList title={`${account.displayName} 내 투자`} holdings={account.holdings} metrics={metrics} scope="account" />
     </motion.div>
+  );
+}
+
+function CryptoAccountDashboard({ account }: { account: AccountNavigationItem }) {
+  const coinHoldings = account.holdings.filter((holding) => holding.assetType === "CRYPTO");
+  const cashKrw = account.holdings
+    .filter((holding) => holding.assetType === "CASH" && holding.currency === "KRW")
+    .reduce((sum, holding) => sum + holding.marketValue, 0);
+  const coinMetrics = metricsFromHoldings(coinHoldings);
+  const lastSyncedAt = latestHoldingPriceTime(account.holdings);
+  const profitTone = coinMetrics.totalProfitLoss >= 0 ? "text-[#EF4444]" : "text-[#2563EB]";
+
+  return (
+    <motion.div className="min-w-0 space-y-5" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.42, ease: "easeOut" }}>
+      <section className="hero-card min-w-0 overflow-hidden rounded-[24px] p-6">
+        <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-[0.26em] text-blue-500">UPBIT Crypto Account</p>
+            <h2 className="mt-2 text-3xl font-black text-[var(--text-primary)]">{account.displayName}</h2>
+            <p className="mt-2 text-sm font-semibold text-[var(--text-secondary)]">조회 전용 API Key 기준으로 보유 코인과 원화 보유금을 표시합니다. 주문/입출금 기능은 제공하지 않습니다.</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-black text-blue-700">
+            <LockKeyhole className="h-4 w-4" />
+            조회 전용
+          </div>
+        </div>
+        <div className="mt-6 grid gap-3 md:grid-cols-5">
+          <CryptoKpi label="총 코인 평가금액" value={formatKrw(coinMetrics.totalMarketValue)} icon={CircleDollarSign} />
+          <CryptoKpi label="총 손익" value={formatSignedKrw(coinMetrics.totalProfitLoss)} icon={LineChartIcon} valueClassName={profitTone} />
+          <CryptoKpi label="총 수익률" value={formatPercent(coinMetrics.returnRate)} icon={PieIcon} valueClassName={profitTone} />
+          <CryptoKpi label="원화 보유금" value={formatKrw(cashKrw)} icon={Wallet} />
+          <CryptoKpi label="마지막 동기화" value={formatDateTime(lastSyncedAt)} icon={Clock3} />
+        </div>
+      </section>
+      <CryptoHoldingList holdings={coinHoldings} />
+    </motion.div>
+  );
+}
+
+function CryptoKpi({ label, value, icon: Icon, valueClassName }: { label: string; value: string; icon: ElementType; valueClassName?: string }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-[var(--card-border)] bg-[var(--surface)] p-4 shadow-sm">
+      <div className="flex items-center gap-2 text-[12px] font-black text-[var(--text-secondary)]">
+        <Icon className="h-4 w-4 text-blue-500" />
+        <span className="truncate">{label}</span>
+      </div>
+      <p className={cn("numeric mt-3 overflow-hidden text-ellipsis text-[17px] font-black text-[var(--text-primary)]", valueClassName)}>{value}</p>
+    </div>
+  );
+}
+
+function CryptoHoldingList({ holdings }: { holdings: Holding[] }) {
+  if (holdings.length === 0) {
+    return <EmptyState title="보유 코인이 없습니다." description="업비트 연결 후 동기화하면 코인 잔고가 표시됩니다." />;
+  }
+
+  return (
+    <section className="min-w-0 overflow-hidden rounded-[22px] border border-[var(--card-border)] bg-[var(--surface)] shadow-sm">
+      <div className="border-b border-[var(--card-border)] px-5 py-4">
+        <h3 className="text-lg font-black text-[var(--text-primary)]">보유 코인</h3>
+      </div>
+      <div className="divide-y divide-[var(--card-border)]">
+        {holdings.map((holding) => {
+          const positive = holding.profitLoss >= 0;
+          return (
+            <div key={holding.id} className="flex min-w-0 items-center gap-4 px-5 py-4">
+              <SecurityLogo symbol={holding.symbol} name={holding.name} logoUrl={holding.logoUrl} marketCountry={holding.marketCountry} size="lg" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-black text-[var(--text-primary)]">{holding.name}</p>
+                <p className="numeric mt-1 truncate text-[12px] font-bold text-[var(--text-secondary)]">
+                  {holding.symbol} · 보유 {formatCryptoQuantity(holding.quantity)}
+                </p>
+                <p className="numeric mt-2 text-[12px] font-semibold text-[var(--text-muted)]">
+                  평균 {formatKrw(holding.averagePurchasePrice)} · 현재 {formatKrw(holding.marketPrice)}
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="numeric text-[15px] font-black text-[var(--text-primary)]">{formatKrw(holding.marketValue)}</p>
+                <p className={cn("numeric mt-1 text-[12px] font-black", positive ? "text-[#EF4444]" : "text-[#2563EB]")}>
+                  {formatSignedKrw(holding.profitLoss)} ({formatPercent(holding.profitLossRate)})
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -3366,10 +3460,12 @@ function ConnectedServicesCard({ token, onConnectAccount }: { token: string; onC
   const tossQuery = useQuery({ queryKey: ["toss-credentials"], queryFn: () => api.tossCredentials(token) });
   const namuhQuery = useQuery({ queryKey: ["settings", "namuh-credentials"], queryFn: () => api.namuhCredentials(token) });
   const kiwoomQuery = useQuery({ queryKey: ["settings", "kiwoom-credentials"], queryFn: () => api.kiwoomCredentials(token) });
+  const upbitQuery = useQuery({ queryKey: ["settings", "upbit-credentials"], queryFn: () => api.upbitCredentials(token) });
 
   const tossAccounts = tossQuery.data ?? [];
   const namuhProfiles = namuhQuery.data ?? [];
   const kiwoomProfiles = kiwoomQuery.data ?? [];
+  const upbitProfiles = upbitQuery.data ?? [];
   const services = [
     {
       broker: "TOSS" as BrokerKey,
@@ -3401,6 +3497,15 @@ function ConnectedServicesCard({ token, onConnectAccount }: { token: string; onC
       meta: kiwoomProfiles.length ? `${kiwoomProfiles.length}개 키 · ${latestDate(kiwoomProfiles.map((profile) => profile.updatedAt))}` : "저장된 키움 키 없음",
       summary: kiwoomProfiles[0] ? `${kiwoomProfiles[0].label} · ${kiwoomProfiles[0].useMock ? "모의투자" : "실전투자"} · ${kiwoomProfiles[0].appKeyPreview}` : "설정 관리에서 API 키를 저장하세요.",
       loading: kiwoomQuery.isLoading
+    },
+    {
+      broker: "UPBIT" as BrokerKey,
+      title: "업비트 Open API",
+      description: "조회 전용 API Key로 코인 잔고와 현재가를 동기화합니다.",
+      status: serviceStatus(upbitProfiles.length > 0, upbitProfiles.some((profile) => profile.status === "ERROR" || Boolean(profile.errorMessage))),
+      meta: upbitProfiles.length ? `${upbitProfiles.length}개 연결 · 코인 ${upbitProfiles.reduce((sum, profile) => sum + profile.holdingsCount, 0)}개 · ${latestDate(upbitProfiles.map((profile) => profile.lastSyncedAt ?? profile.updatedAt))}` : "저장된 업비트 키 없음",
+      summary: upbitProfiles[0] ? `${upbitProfiles[0].label} · ${upbitProfiles[0].accessKeyPreview ?? "Access Key 저장됨"} · 원화 ${formatKrw(upbitProfiles[0].cashKrw)}` : "조회 권한 API Key를 저장한 뒤 동기화하세요.",
+      loading: upbitQuery.isLoading
     }
   ];
 
@@ -3429,7 +3534,7 @@ function ConnectedServicesCard({ token, onConnectAccount }: { token: string; onC
             <Plus className="h-5 w-5" />
           </span>
           <span className="text-sm font-black text-[#0F172A]">계좌 연결 추가</span>
-          <span className="text-xs font-semibold text-[#64748B]">토스증권, 나무증권, 키움증권, CSV/XLSX 업로드를 연결할 수 있습니다.</span>
+          <span className="text-xs font-semibold text-[#64748B]">토스증권, 나무증권, 키움증권, 업비트, CSV/XLSX 업로드를 연결할 수 있습니다.</span>
         </button>
       </CardContent>
       <SettingsModal open={activeService === "TOSS"} title="토스증권 API 설정 관리" onClose={() => setActiveService(null)}>
@@ -3440,6 +3545,9 @@ function ConnectedServicesCard({ token, onConnectAccount }: { token: string; onC
       </SettingsModal>
       <SettingsModal open={activeService === "KIWOOM"} title="키움증권 REST API 설정 관리" onClose={() => setActiveService(null)}>
         <KiwoomCredentialManager token={token} />
+      </SettingsModal>
+      <SettingsModal open={activeService === "UPBIT"} title="업비트 Open API 설정 관리" onClose={() => setActiveService(null)}>
+        <UpbitCredentialManager token={token} />
       </SettingsModal>
     </Card>
   );
@@ -3481,6 +3589,176 @@ function BrokerServiceRow({
         <Button size="icon" variant="ghost" aria-label={`${service.title} 더보기`} onClick={onManage}>
           <MoreVertical className="h-4 w-4" />
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function UpbitCredentialManager({ token }: { token: string }) {
+  const { notify } = useToast();
+  const queryClient = useQueryClient();
+  const profilesQuery = useQuery({ queryKey: ["settings", "upbit-credentials"], queryFn: () => api.upbitCredentials(token) });
+  const [draft, setDraft] = useState({ connectionId: "", label: "", accessKey: "", secretKey: "" });
+
+  function resetDraft() {
+    setDraft({ connectionId: "", label: "", accessKey: "", secretKey: "" });
+  }
+
+  function editProfile(profile: UpbitCredentialProfile) {
+    setDraft({
+      connectionId: profile.connectionId,
+      label: profile.label,
+      accessKey: profile.accessKey ?? "",
+      secretKey: ""
+    });
+    notify({ kind: "info", title: "업비트 설정 편집", description: `${profile.label} API 키를 편집합니다.` });
+  }
+
+  const testCredential = useMutation({
+    mutationFn: () => {
+      if (!draft.accessKey.trim()) throw new Error("업비트 Access Key를 입력하세요.");
+      if (!draft.secretKey.trim()) throw new Error("연결 테스트에는 Secret Key가 필요합니다.");
+      return api.testUpbitCredential({ accessKey: draft.accessKey.trim(), secretKey: draft.secretKey.trim() }, token);
+    },
+    onSuccess: (data) => notify({ kind: "success", title: "업비트 연결 테스트 성공", description: data.message }),
+    onError: (error) => notify({ kind: "error", title: "업비트 연결 테스트 실패", description: (error as Error).message })
+  });
+
+  const saveProfile = useMutation({
+    mutationFn: () => {
+      if (!draft.label.trim()) throw new Error("업비트 연결 이름을 입력하세요.");
+      if (!draft.accessKey.trim()) throw new Error("업비트 Access Key를 입력하세요.");
+      if (!draft.connectionId && !draft.secretKey.trim()) throw new Error("새 업비트 연결에는 Secret Key가 필요합니다.");
+      return api.saveUpbitCredentialProfile(
+        {
+          connectionId: draft.connectionId || undefined,
+          label: draft.label.trim(),
+          accessKey: draft.accessKey.trim(),
+          secretKey: draft.secretKey.trim() || undefined
+        },
+        token
+      );
+    },
+    onSuccess: async () => {
+      resetDraft();
+      await queryClient.invalidateQueries({ queryKey: ["settings", "upbit-credentials"] });
+      await queryClient.invalidateQueries({ queryKey: ["summary"] });
+      notify({ kind: "success", title: "업비트 API 키 저장", description: "API Key를 암호화 저장했습니다. 동기화를 실행하면 계좌 트리에 추가됩니다." });
+    },
+    onError: (error) => notify({ kind: "error", title: "업비트 키 저장 실패", description: (error as Error).message })
+  });
+
+  const syncProfile = useMutation({
+    mutationFn: (connectionId: string) => api.syncUpbit({ credentialId: connectionId }, token),
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: ["settings", "upbit-credentials"] });
+      await queryClient.invalidateQueries({ queryKey: ["summary"] });
+      notify({ kind: "success", title: "업비트 동기화 완료", description: `${data.saved}개 코인 잔고를 반영했습니다.` });
+    },
+    onError: (error) => notify({ kind: "error", title: "업비트 동기화 실패", description: (error as Error).message })
+  });
+
+  const deleteProfile = useMutation({
+    mutationFn: (connectionId: string) => api.deleteUpbitCredentialProfile(connectionId, token),
+    onSuccess: async () => {
+      resetDraft();
+      await queryClient.invalidateQueries({ queryKey: ["settings", "upbit-credentials"] });
+      await queryClient.invalidateQueries({ queryKey: ["summary"] });
+      notify({ kind: "success", title: "업비트 연결 삭제", description: "저장된 API Key와 코인 잔고를 삭제했습니다." });
+    },
+    onError: (error) => notify({ kind: "error", title: "업비트 연결 삭제 실패", description: (error as Error).message })
+  });
+
+  const profiles = profilesQuery.data ?? [];
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm font-semibold leading-6 text-orange-800">
+        업비트 API Key는 자산 조회 권한만 사용하세요. 이 화면은 잔고/현재가 조회 전용이며 매수, 매도, 입출금 기능은 만들지 않습니다.
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="grid gap-3 md:grid-cols-[180px_1fr_1fr]">
+          <label className="block text-sm font-bold text-slate-700">
+            연결 이름
+            <Input
+              className="mt-2"
+              value={draft.label}
+              placeholder="예: 업비트 코인 계좌"
+              onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))}
+            />
+          </label>
+          <label className="block text-sm font-bold text-slate-700">
+            Access Key
+            <Input
+              className="mt-2"
+              value={draft.accessKey}
+              placeholder="업비트 Access Key"
+              onChange={(event) => setDraft((current) => ({ ...current, accessKey: event.target.value }))}
+            />
+          </label>
+          <label className="block text-sm font-bold text-slate-700">
+            Secret Key
+            <Input
+              className="mt-2"
+              type="password"
+              value={draft.secretKey}
+              placeholder={draft.connectionId ? "변경할 때만 입력" : "새 연결 시 필수"}
+              onChange={(event) => setDraft((current) => ({ ...current, secretKey: event.target.value }))}
+            />
+          </label>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => testCredential.mutate()} disabled={testCredential.isPending}>
+            {testCredential.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+            연결 테스트
+          </Button>
+          <Button onClick={() => saveProfile.mutate()} disabled={saveProfile.isPending}>
+            {saveProfile.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Settings className="h-4 w-4" />}
+            {draft.connectionId ? "업비트 키 수정" : "업비트 키 저장"}
+          </Button>
+          <Button variant="ghost" onClick={resetDraft}>
+            입력 초기화
+          </Button>
+        </div>
+      </div>
+
+      {profilesQuery.isLoading ? <LoadingState label="업비트 연결 정보를 불러오고 있습니다." /> : null}
+      {profilesQuery.isError ? <ErrorState message={(profilesQuery.error as Error).message} onRetry={() => profilesQuery.refetch()} /> : null}
+      {profiles.length === 0 && !profilesQuery.isLoading ? <EmptyState title="저장된 업비트 연결이 없습니다." description="조회 권한 API Key를 저장한 뒤 동기화하세요." /> : null}
+
+      <div className="grid gap-3">
+        {profiles.map((profile) => (
+          <div key={profile.connectionId} className="rounded-xl border border-slate-200 p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-base font-black text-slate-950">{profile.label}</p>
+                  <StatusBadge status={profile.status} label={statusLabel(profile.status)} />
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black text-slate-500">{profile.source}</span>
+                </div>
+                <p className="mt-2 text-xs font-semibold text-slate-500">
+                  Access {profile.accessKeyPreview ?? "저장됨"} · Secret {profile.secretPreview ?? "저장됨"} · 코인 {profile.holdingsCount}개
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  원화 보유금 {formatKrw(profile.cashKrw)} · 마지막 동기화 {formatDateTime(profile.lastSyncedAt)}
+                </p>
+                {profile.errorMessage ? <p className="mt-1 text-xs font-bold text-orange-600">{profile.errorMessage}</p> : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => editProfile(profile)}>
+                  수정
+                </Button>
+                <Button size="sm" onClick={() => syncProfile.mutate(profile.connectionId)} disabled={syncProfile.isPending}>
+                  {syncProfile.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  동기화
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => deleteProfile.mutate(profile.connectionId)} disabled={deleteProfile.isPending}>
+                  연결 해제
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -4255,6 +4533,9 @@ function BrokerServiceIcon({ broker }: { broker: BrokerKey }) {
         <img src="/broker-icons/kiwoom-ci-symbol.png" alt="" className="h-full w-full object-contain" loading="lazy" />
       </span>
     );
+  }
+  if (broker === "UPBIT") {
+    return <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#F97316] to-[#F59E0B] text-white"><CircleDollarSign className="h-6 w-6" /></span>;
   }
   return <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#22C55E] to-[#16A34A] text-lg font-black text-white">N</span>;
 }
@@ -5494,16 +5775,18 @@ function buildBrokerAccountGroups(accounts: AccountNavigationItem[]) {
 }
 
 function brokerOrder(broker: BrokerKey) {
-  const order: Record<BrokerKey, number> = { TOSS: 0, NAMUH: 1, KIWOOM: 2 };
+  const order: Record<BrokerKey, number> = { TOSS: 0, NAMUH: 1, KIWOOM: 2, UPBIT: 3 };
   return order[broker] ?? 99;
 }
 
 function buildAccountShortName(broker: BrokerKey, alias: string, accountType: string, holdings: Holding[]) {
   const typeLabel = accountTypeLabel(accountType);
-  const genericNames = [brokerLabels[broker], brokerShortLabel(broker), "키움 계좌", "토스증권", "나무증권"];
+  const genericNames = [brokerLabels[broker], brokerShortLabel(broker), "키움 계좌", "토스증권", "나무증권", "업비트"];
   const normalizedAlias = alias.replace(/\s+/g, " ").trim();
   const maskedAccount = normalizedAlias.match(/\d{2}\*+\d{2}/)?.[0];
-  const marketLabel = holdings.every((holding) => !isDomesticHolding(holding))
+  const marketLabel = holdings.every((holding) => holding.assetType === "CRYPTO" || holding.assetType === "CASH")
+    ? "코인 계좌"
+    : holdings.every((holding) => !isDomesticHolding(holding))
     ? "해외주식"
     : holdings.every(isDomesticHolding)
       ? "국내주식"
@@ -5539,32 +5822,35 @@ function metricsFromHoldings(holdings: Holding[]): Metric {
 
 function assetAllocationFromHoldings(holdings: Holding[]): ChartDatum[] {
   const total = holdings.reduce((sum, holding) => sum + safeNumber(holding.marketValue), 0);
-  const cashValue = Math.max(0, total * 0.044);
-  const investedTotal = Math.max(0, total - cashValue);
+  const cashValue = holdings.filter((holding) => holding.assetType === "CASH").reduce((sum, holding) => sum + holding.marketValue, 0);
   const overseasStockValue = holdings
-    .filter((holding) => !isDomesticHolding(holding) && holding.assetType !== "ETF")
+    .filter((holding) => !isDomesticHolding(holding) && holding.assetType !== "ETF" && holding.assetType !== "CRYPTO" && holding.assetType !== "CASH")
     .reduce((sum, holding) => sum + holding.marketValue, 0);
   const domesticStockValue = holdings
-    .filter((holding) => isDomesticHolding(holding) && holding.assetType !== "ETF")
+    .filter((holding) => isDomesticHolding(holding) && holding.assetType !== "ETF" && holding.assetType !== "CRYPTO" && holding.assetType !== "CASH")
     .reduce((sum, holding) => sum + holding.marketValue, 0);
   const etfValue = holdings.filter((holding) => holding.assetType === "ETF").reduce((sum, holding) => sum + holding.marketValue, 0);
-  const rawInvestedTotal = overseasStockValue + domesticStockValue + etfValue;
-  const scale = rawInvestedTotal > 0 ? investedTotal / rawInvestedTotal : 1;
+  const cryptoValue = holdings.filter((holding) => holding.assetType === "CRYPTO").reduce((sum, holding) => sum + holding.marketValue, 0);
   const buckets = [
     {
       name: "해외 주식",
-      value: overseasStockValue * scale,
+      value: overseasStockValue,
       color: "#3b82f6"
     },
     {
       name: "국내 주식",
-      value: domesticStockValue * scale,
+      value: domesticStockValue,
       color: "#48c6a7"
     },
     {
       name: "ETF",
-      value: etfValue * scale,
+      value: etfValue,
       color: "#8b5cf6"
+    },
+    {
+      name: "코인",
+      value: cryptoValue,
+      color: "#f97316"
     },
     {
       name: "현금",
@@ -5591,7 +5877,8 @@ function brokerGroupIcon(broker: BrokerKey) {
   const icons: Record<BrokerKey, ElementType> = {
     TOSS: Wallet,
     NAMUH: PieIcon,
-    KIWOOM: BarChart3
+    KIWOOM: BarChart3,
+    UPBIT: CircleDollarSign
   };
   return icons[broker];
 }
@@ -5608,7 +5895,8 @@ function brokerAccentClass(broker: BrokerKey) {
   const classes: Record<BrokerKey, string> = {
     TOSS: "bg-blue-500",
     NAMUH: "bg-emerald-500",
-    KIWOOM: "bg-violet-500"
+    KIWOOM: "bg-violet-500",
+    UPBIT: "bg-orange-500"
   };
   return classes[broker];
 }
@@ -5617,13 +5905,14 @@ function brokerColor(broker: BrokerKey) {
   const colors: Record<BrokerKey, string> = {
     TOSS: "#3B82F6",
     NAMUH: "#22C55E",
-    KIWOOM: "#A855F7"
+    KIWOOM: "#A855F7",
+    UPBIT: "#F97316"
   };
   return colors[broker];
 }
 
 function sortMarketIndicators(indicators: MarketIndicatorsResult["indicators"]) {
-  const order = ["KOSPI", "KOSDAQ", "SPX", "NASDAQ100", "NDX", "WTI", "USD_KRW", "FEAR_GREED", "VIX", "BTC"];
+  const order = ["KOSPI", "KOSDAQ", "SPX", "NASDAQ100", "NDX", "WTI", "USD_KRW", "BTC", "ETH", "FEAR_GREED", "VIX"];
   const seen = new Set<string>();
 
   return [...indicators]
@@ -5639,7 +5928,7 @@ function sortMarketIndicators(indicators: MarketIndicatorsResult["indicators"]) 
 }
 
 function selectDashboardMarketIndicators(indicators: MarketIndicatorsResult["indicators"]) {
-  const order = ["KOSPI", "KOSDAQ", "SPX", "NASDAQ100", "NDX", "WTI", "USD_KRW"];
+  const order = ["KOSPI", "KOSDAQ", "SPX", "NASDAQ100", "NDX", "WTI", "USD_KRW", "BTC", "ETH"];
   const seen = new Set<string>();
 
   return [...indicators]
@@ -5651,7 +5940,7 @@ function selectDashboardMarketIndicators(indicators: MarketIndicatorsResult["ind
       seen.add(group);
       return true;
     })
-    .slice(0, 6);
+    .slice(0, 8);
 }
 
 function findFearGreedIndicator(data?: MarketIndicatorsResult) {
@@ -5890,7 +6179,8 @@ function brokerShortLabel(broker: BrokerKey) {
   const labels: Record<BrokerKey, string> = {
     TOSS: "토스",
     NAMUH: "나무",
-    KIWOOM: "키움"
+    KIWOOM: "키움",
+    UPBIT: "업비트"
   };
   return labels[broker];
 }
@@ -5955,7 +6245,8 @@ function compactIndicatorName(name: string, symbol: string) {
     SPX: "S&P 500",
     NASDAQ100: "Nasdaq 100",
     NDX: "Nasdaq 100",
-    BTC: "비트코인"
+    BTC: "비트코인",
+    ETH: "이더리움"
   };
   return names[symbol] ?? name.replace("원/달러 환율", "USD/KRW").replace("국제유가 ", "");
 }
@@ -6023,12 +6314,27 @@ function formatQuantity(value: number) {
   return value.toLocaleString("ko-KR", { maximumFractionDigits: 6 });
 }
 
+function formatCryptoQuantity(value: number) {
+  return value.toLocaleString("ko-KR", { maximumFractionDigits: 8 });
+}
+
+function latestHoldingPriceTime(holdings: Holding[]) {
+  const latest = holdings
+    .map((holding) => holding.priceUpdatedAt)
+    .filter(Boolean)
+    .map((value) => new Date(value as string))
+    .filter((date) => !Number.isNaN(date.getTime()))
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+  return latest?.toISOString() ?? null;
+}
+
 function accountTypeLabel(value: string) {
   const labels: Record<string, string> = {
     BROKERAGE: "일반계좌",
     ISA: "ISA",
     PENSION_SAVINGS: "연금저축",
-    MANUAL: "수동입력"
+    MANUAL: "수동입력",
+    CRYPTO: "코인 계좌"
   };
   return labels[value] ?? value;
 }

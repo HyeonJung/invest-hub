@@ -4,6 +4,7 @@ import { AuthGuard } from "../auth/guards/auth.guard";
 import type { AuthenticatedUser } from "../auth/oauth.types";
 import { KiwoomRestAdapter } from "./adapters/kiwoom-rest.adapter";
 import { NamuhOpenApiAdapter } from "./adapters/namuh-open-api.adapter";
+import { UpbitExchangeAdapter } from "./adapters/upbit-exchange.adapter";
 import { TossOpenApiService } from "./toss-open-api.service";
 
 @Controller("brokers")
@@ -12,7 +13,8 @@ export class BrokersController {
   constructor(
     private readonly tossOpenApiService: TossOpenApiService,
     private readonly kiwoomRestAdapter: KiwoomRestAdapter,
-    private readonly namuhOpenApiAdapter: NamuhOpenApiAdapter
+    private readonly namuhOpenApiAdapter: NamuhOpenApiAdapter,
+    private readonly upbitExchangeAdapter: UpbitExchangeAdapter
   ) {}
 
   @Post("toss/sync")
@@ -83,5 +85,35 @@ export class BrokersController {
     @CurrentUser() user: AuthenticatedUser
   ) {
     return this.namuhOpenApiAdapter.syncAll(user.id, { accountNo: body.accountNo, credentialId: body.credentialId });
+  }
+
+  @Get("upbit/status")
+  async upbitStatus(@CurrentUser() user: AuthenticatedUser) {
+    return this.upbitExchangeAdapter.getConnectionStatus(user.id);
+  }
+
+  @Post("upbit/test")
+  async testUpbit(
+    @Body() body: { accessKey: string; secretKey: string },
+    @CurrentUser() user: AuthenticatedUser
+  ) {
+    void user;
+    return this.upbitExchangeAdapter.validateCredential(body.accessKey, body.secretKey);
+  }
+
+  @Post("upbit/connect")
+  async connectUpbit(
+    @Body() body: { credentialId?: string },
+    @CurrentUser() user: AuthenticatedUser
+  ) {
+    return this.upbitExchangeAdapter.connect(user.id, { credentialId: body.credentialId });
+  }
+
+  @Post("upbit/sync")
+  async syncUpbit(
+    @Body() body: { credentialId?: string },
+    @CurrentUser() user: AuthenticatedUser
+  ) {
+    return this.upbitExchangeAdapter.syncAll(user.id, { credentialId: body.credentialId });
   }
 }

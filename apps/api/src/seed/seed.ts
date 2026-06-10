@@ -287,6 +287,9 @@ const holdings: SeedHolding[] = [
 ];
 
 async function main() {
+  await prisma.cryptoHolding.deleteMany();
+  await prisma.cryptoCashBalance.deleteMany();
+  await prisma.cryptoAsset.deleteMany();
   await prisma.holding.deleteMany();
   await prisma.security.deleteMany();
   await prisma.accountApiCredential.deleteMany();

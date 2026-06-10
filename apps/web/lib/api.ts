@@ -135,6 +135,25 @@ export const api = {
       body: JSON.stringify(payload),
       token
     }),
+  upbitStatus: (token: string | null) => request<UpbitStatus>("/brokers/upbit/status", { token }),
+  testUpbitCredential: (payload: { accessKey: string; secretKey: string }, token: string | null) =>
+    request<{ ok: true; message: string }>("/brokers/upbit/test", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      token
+    }),
+  connectUpbit: (payload: { credentialId?: string }, token: string | null) =>
+    request<UpbitConnectResult>("/brokers/upbit/connect", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      token
+    }),
+  syncUpbit: (payload: { credentialId?: string }, token: string | null) =>
+    request<UpbitSyncResult>("/brokers/upbit/sync", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      token
+    }),
   uploadPreview: (file: File, broker: BrokerKey, accountType: string, token: string | null) => {
     const body = new FormData();
     body.append("file", file);
@@ -221,6 +240,18 @@ export const api = {
       method: "DELETE",
       token
     }),
+  upbitCredentials: (token: string | null) => request<UpbitCredentialProfile[]>("/settings/upbit-credentials", { token }),
+  saveUpbitCredentialProfile: (payload: { connectionId?: string; label?: string; accessKey: string; secretKey?: string }, token: string | null) =>
+    request<UpbitCredentialProfile[]>("/settings/upbit-credentials", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      token
+    }),
+  deleteUpbitCredentialProfile: (connectionId: string, token: string | null) =>
+    request<UpbitCredentialProfile[]>(`/settings/upbit-credentials/${connectionId}`, {
+      method: "DELETE",
+      token
+    }),
   rebalance: (targets: PortfolioTargetInput[], token: string | null) =>
     request<RebalanceResult>("/rebalance", {
       method: "POST",
@@ -229,7 +260,7 @@ export const api = {
     })
 };
 
-export type BrokerKey = "TOSS" | "NAMUH" | "KIWOOM";
+export type BrokerKey = "TOSS" | "NAMUH" | "KIWOOM" | "UPBIT";
 
 export type AuthUser = {
   id: string;
@@ -692,6 +723,69 @@ export type NamuhSyncResult = {
     totalProfitLoss: number;
     totalReturnRate: number;
   };
+};
+
+export type UpbitCredentialProfile = {
+  connectionId: string;
+  label: string;
+  accessKey: string | null;
+  accessKeyPreview: string | null;
+  secretPreview: string | null;
+  status: "ACTIVE" | "ERROR" | "INACTIVE";
+  source: "DB" | "ENV";
+  baseUrl: string;
+  updatedAt: string | null;
+  lastSyncedAt: string | null;
+  lastPriceSyncedAt: string | null;
+  errorMessage: string | null;
+  holdingsCount: number;
+  cashKrw: number;
+};
+
+export type UpbitStatus = {
+  connected: boolean;
+  status: "ACTIVE" | "ERROR" | "INACTIVE";
+  brokerType: "UPBIT";
+  connectionType: "API";
+  baseUrl: string;
+  hasEnvCredential: boolean;
+  credentials: UpbitCredentialProfile[];
+};
+
+export type UpbitConnectResult = {
+  broker: "UPBIT";
+  connected: boolean;
+  credentialId: string;
+  message: string;
+  accounts: Array<{
+    broker: "UPBIT";
+    externalAccountId: string;
+    brokerAccountNo: string | null;
+    accountAlias: string;
+    accountType: "CRYPTO";
+    currencyBase: "KRW";
+  }>;
+};
+
+export type UpbitSyncResult = {
+  broker: "UPBIT";
+  connectionId: string;
+  accounts: number;
+  saved: number;
+  syncedAt: string;
+  source: "UPBIT_REST_API";
+  cashBalances: Array<{
+    currency: string;
+    balance: number;
+    locked: number;
+  }>;
+  portfolioValue: {
+    totalPurchaseAmount: number;
+    totalMarketValue: number;
+    totalProfitLoss: number;
+    totalReturnRate: number;
+  };
+  errors: string[];
 };
 
 export type RebalanceResult = {

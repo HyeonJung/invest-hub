@@ -3,6 +3,7 @@ import { AuthModule } from "../auth/auth.module";
 import { BrokersModule } from "../brokers/brokers.module";
 import { KiwoomRestAdapter } from "../brokers/adapters/kiwoom-rest.adapter";
 import { NamuhOpenApiAdapter } from "../brokers/adapters/namuh-open-api.adapter";
+import { UpbitExchangeAdapter } from "../brokers/adapters/upbit-exchange.adapter";
 import { MarketIndicatorsModule } from "../market-indicators/market-indicators.module";
 import { PricesController } from "./prices.controller";
 import { PricesService } from "./prices.service";
@@ -10,7 +11,7 @@ import { PricesService } from "./prices.service";
 @Module({
   imports: [AuthModule, BrokersModule, MarketIndicatorsModule],
   controllers: [PricesController],
-  providers: [PricesService, KiwoomRestAdapter, NamuhOpenApiAdapter],
+  providers: [PricesService, KiwoomRestAdapter, NamuhOpenApiAdapter, UpbitExchangeAdapter],
   exports: [PricesService]
 })
 export class PricesModule {}

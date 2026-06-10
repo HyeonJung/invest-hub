@@ -192,6 +192,18 @@ export class MockMarketDataProvider implements MarketDataProvider {
         unit: "USD",
         marketState: "REGULAR",
         refreshIntervalMs: 180_000
+      }),
+      indicator({
+        symbol: "ETH",
+        name: "이더리움",
+        category: "CRYPTO",
+        value: 3560.25,
+        change: -18.4,
+        changeRate: -0.51,
+        currency: "USD",
+        unit: "USD",
+        marketState: "REGULAR",
+        refreshIntervalMs: 180_000
       })
     ];
   }

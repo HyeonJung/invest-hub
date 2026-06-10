@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, Security } from "@prisma/client";
 import { KiwoomRestAdapter } from "../brokers/adapters/kiwoom-rest.adapter";
 import { NamuhOpenApiAdapter } from "../brokers/adapters/namuh-open-api.adapter";
+import { UpbitExchangeAdapter } from "../brokers/adapters/upbit-exchange.adapter";
 import { TossOpenApiService } from "../brokers/toss-open-api.service";
 import { MarketIndicatorsService } from "../market-indicators/market-indicators.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -31,7 +32,8 @@ export class PricesService {
     private readonly marketIndicatorsService: MarketIndicatorsService,
     private readonly tossOpenApiService: TossOpenApiService,
     private readonly kiwoomRestAdapter: KiwoomRestAdapter,
-    private readonly namuhOpenApiAdapter: NamuhOpenApiAdapter
+    private readonly namuhOpenApiAdapter: NamuhOpenApiAdapter,
+    private readonly upbitExchangeAdapter: UpbitExchangeAdapter
   ) {}
 
   async refreshUserPrices(userId: string) {
@@ -40,6 +42,7 @@ export class PricesService {
     const usdKrwRate = await this.marketIndicatorsService.getUsdKrwRate(userId);
     const errors: string[] = [];
     const tossResult = await this.refreshTossHoldingsIfAvailable(userId, errors);
+    const upbitResult = await this.refreshUpbitHoldingsIfAvailable(userId, errors);
     const allHoldings = await this.prisma.holding.findMany({
       where: {
         account: { userId },
@@ -145,16 +148,17 @@ export class PricesService {
     return {
       refreshedAt: startedAt.toISOString(),
       lastSuccessAt: successfulQuotes.length > 0 ? startedAt.toISOString() : await this.getLastSuccessAt(userId),
-      refreshIntervalMs: marketSession.refreshIntervalMs,
+      refreshIntervalMs: upbitResult ? Math.min(marketSession.refreshIntervalMs, 60_000) : marketSession.refreshIntervalMs,
       marketSession,
-      symbolsRequested: allSecurities.length,
-      symbolsFetched: successfulQuotes.length,
-      holdingsUpdated: updatedHoldings + (tossResult?.saved ?? 0),
+      symbolsRequested: allSecurities.length + (upbitResult?.saved ?? 0),
+      symbolsFetched: successfulQuotes.length + (upbitResult?.saved ?? 0),
+      holdingsUpdated: updatedHoldings + (tossResult?.saved ?? 0) + (upbitResult?.saved ?? 0),
       source: [
         tossResult ? "TOSS_OPEN_API" : null,
         "YAHOO_FINANCE",
         kiwoomResult.quotes.size > 0 ? "KIWOOM_REST_API" : null,
-        namuhResult.quotes.size > 0 ? "NAMUH_WMCA" : null
+        namuhResult.quotes.size > 0 ? "NAMUH_WMCA" : null,
+        upbitResult ? "UPBIT_REST_API" : null
       ].filter(Boolean).join(","),
       skipped,
       errors
@@ -171,7 +175,7 @@ export class PricesService {
       symbolsRequested: 0,
       symbolsFetched: 0,
       holdingsUpdated: 0,
-      source: "YAHOO_FINANCE",
+      source: "YAHOO_FINANCE,UPBIT_REST_API",
       skipped: [],
       errors: []
     };
@@ -199,6 +203,27 @@ export class PricesService {
       } else {
         errors.push(`토스 현재가 갱신 실패. 마지막 성공 가격을 유지합니다. ${message}`);
       }
+      return null;
+    }
+  }
+
+  private async refreshUpbitHoldingsIfAvailable(userId: string, errors: string[]) {
+    const [storedConnections, envConnection] = await Promise.all([
+      this.prisma.brokerConnection.count({
+        where: {
+          userId,
+          broker: "UPBIT",
+          credential: { isNot: null }
+        }
+      }),
+      Promise.resolve(Boolean(process.env.UPBIT_ACCESS_KEY && process.env.UPBIT_SECRET_KEY))
+    ]);
+    if (storedConnections === 0 && !envConnection) return null;
+
+    try {
+      return await this.upbitExchangeAdapter.syncPrices(userId);
+    } catch (error) {
+      errors.push(`업비트 현재가 갱신 실패. 마지막 성공 가격을 유지합니다. ${(error as Error).message}`);
       return null;
     }
   }
@@ -467,12 +492,20 @@ export class PricesService {
   }
 
   private async getLastSuccessAt(userId: string) {
-    const row = await this.prisma.holding.findFirst({
-      where: { account: { userId } },
-      orderBy: { snapshotDate: "desc" },
-      select: { snapshotDate: true }
-    });
-    return row?.snapshotDate.toISOString() ?? null;
+    const [stockRow, cryptoRow] = await Promise.all([
+      this.prisma.holding.findFirst({
+        where: { account: { userId } },
+        orderBy: { snapshotDate: "desc" },
+        select: { snapshotDate: true }
+      }),
+      this.prisma.cryptoHolding.findFirst({
+        where: { userId },
+        orderBy: { priceUpdatedAt: "desc" },
+        select: { priceUpdatedAt: true, updatedAt: true }
+      })
+    ]);
+    const candidates = [stockRow?.snapshotDate, cryptoRow?.priceUpdatedAt ?? cryptoRow?.updatedAt].filter(Boolean) as Date[];
+    return candidates.sort((a, b) => b.getTime() - a.getTime())[0]?.toISOString() ?? null;
   }
 }
 

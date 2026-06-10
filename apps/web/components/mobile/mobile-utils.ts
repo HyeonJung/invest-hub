@@ -7,13 +7,15 @@ import { formatKrw } from "@/lib/utils";
 export const mobileBrokerLabels: Record<BrokerKey, string> = {
   TOSS: "토스증권",
   NAMUH: "나무증권",
-  KIWOOM: "키움증권"
+  KIWOOM: "키움증권",
+  UPBIT: "업비트"
 };
 
 export const mobileBrokerColors: Record<BrokerKey, string> = {
   TOSS: "#2563EB",
   NAMUH: "#16A34A",
-  KIWOOM: "#8B5CF6"
+  KIWOOM: "#8B5CF6",
+  UPBIT: "#F97316"
 };
 
 export const mobileBrokerIconSrc: Partial<Record<BrokerKey, string>> = {
@@ -159,18 +161,28 @@ export function assetAllocationFromMobileHoldings(holdings: Holding[]): ChartDat
   const buckets = [
     {
       name: "해외 주식",
-      value: holdings.filter((holding) => !isDomesticMobileHolding(holding) && holding.assetType !== "ETF").reduce((sum, holding) => sum + holding.marketValue, 0),
+      value: holdings.filter((holding) => !isDomesticMobileHolding(holding) && holding.assetType !== "ETF" && holding.assetType !== "CRYPTO" && holding.assetType !== "CASH").reduce((sum, holding) => sum + holding.marketValue, 0),
       color: "#2563EB"
     },
     {
       name: "국내 주식",
-      value: holdings.filter((holding) => isDomesticMobileHolding(holding) && holding.assetType !== "ETF").reduce((sum, holding) => sum + holding.marketValue, 0),
+      value: holdings.filter((holding) => isDomesticMobileHolding(holding) && holding.assetType !== "ETF" && holding.assetType !== "CRYPTO" && holding.assetType !== "CASH").reduce((sum, holding) => sum + holding.marketValue, 0),
       color: "#14B8A6"
     },
     {
       name: "ETF",
       value: holdings.filter((holding) => holding.assetType === "ETF").reduce((sum, holding) => sum + holding.marketValue, 0),
       color: "#8B5CF6"
+    },
+    {
+      name: "코인",
+      value: holdings.filter((holding) => holding.assetType === "CRYPTO").reduce((sum, holding) => sum + holding.marketValue, 0),
+      color: "#F97316"
+    },
+    {
+      name: "현금",
+      value: holdings.filter((holding) => holding.assetType === "CASH").reduce((sum, holding) => sum + holding.marketValue, 0),
+      color: "#F59E0B"
     }
   ];
 
@@ -217,7 +229,8 @@ export function accountTypeLabelMobile(value: string) {
     PENSION_SAVINGS: "연금저축",
     OVERSEAS: "해외주식",
     DOMESTIC: "국내주식",
-    MANUAL: "수동입력"
+    MANUAL: "수동입력",
+    CRYPTO: "코인 계좌"
   };
   return labels[value] ?? value;
 }
@@ -285,7 +298,9 @@ export function safeNumber(value: number | null | undefined) {
 
 function buildMobileAccountShortName(broker: BrokerKey, alias: string, accountType: string, holdings: Holding[]) {
   const typeLabel = accountTypeLabelMobile(accountType);
-  const marketLabel = holdings.every((holding) => !isDomesticMobileHolding(holding))
+  const marketLabel = holdings.every((holding) => holding.assetType === "CRYPTO" || holding.assetType === "CASH")
+    ? "코인 계좌"
+    : holdings.every((holding) => !isDomesticMobileHolding(holding))
     ? "해외주식"
     : holdings.every(isDomesticMobileHolding)
       ? "국내주식"
@@ -316,6 +331,6 @@ function stableMobileHash(value: string) {
 }
 
 function brokerOrder(broker: BrokerKey) {
-  const order: Record<BrokerKey, number> = { TOSS: 0, NAMUH: 1, KIWOOM: 2 };
+  const order: Record<BrokerKey, number> = { TOSS: 0, NAMUH: 1, KIWOOM: 2, UPBIT: 3 };
   return order[broker] ?? 99;
 }

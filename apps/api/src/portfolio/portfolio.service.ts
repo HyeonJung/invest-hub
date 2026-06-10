@@ -70,19 +70,22 @@ export class PortfolioService {
 
   async getHoldingRows(userId: string, broker?: Broker, usdKrwRate?: number): Promise<HoldingRow[]> {
     const effectiveUsdKrwRate = usdKrwRate ?? (await this.marketIndicatorsService.getUsdKrwRate(userId));
-    const rows = await this.prisma.holding.findMany({
-      where: {
-        account: {
-          userId,
-          ...(broker ? { broker } : {})
-        }
-      },
-      include: {
-        security: true,
-        account: true
-      },
-      orderBy: { marketValue: "desc" }
-    });
+    const rows =
+      broker === Broker.UPBIT
+        ? []
+        : await this.prisma.holding.findMany({
+            where: {
+              account: {
+                userId,
+                ...(broker ? { broker } : {})
+              }
+            },
+            include: {
+              security: true,
+              account: true
+            },
+            orderBy: { marketValue: "desc" }
+          });
     const prices =
       rows.length > 0
         ? await this.prisma.currentPrice.findMany({
@@ -97,7 +100,7 @@ export class PortfolioService {
     const priceMap = new Map(prices.map((price) => [`${price.symbol}:${price.marketCountry}`, price]));
     const logoMap = await this.stockLogoService.getLogosForSecurities(rows.map((row) => row.security));
 
-    return rows.map((row) => {
+    const stockHoldings = rows.map((row) => {
       const quantity = Number(row.quantity);
       const storedMarketPrice = Number(row.marketPrice);
       const averagePurchasePrice = Number(row.averagePurchasePrice);
@@ -174,7 +177,9 @@ export class PortfolioService {
           ? rawAnnualDividendEstimate * effectiveUsdKrwRate
           : rawAnnualDividendEstimate
       };
-    }).sort((a, b) => b.marketValue - a.marketValue);
+    });
+    const cryptoHoldings = !broker || broker === Broker.UPBIT ? await this.getCryptoHoldingRows(userId) : [];
+    return [...stockHoldings, ...cryptoHoldings].sort((a, b) => b.marketValue - a.marketValue);
   }
 
   buildSummary(holdings: HoldingRow[], marketContext: MarketContext) {
@@ -184,7 +189,7 @@ export class PortfolioService {
       assetAllocation: this.assetAllocation(holdings),
       accountValues: this.accountValues(holdings),
       accountReturns: this.accountReturns(holdings),
-      topHoldings: holdings.slice(0, 5),
+      topHoldings: holdings.filter((holding) => holding.assetType !== "CASH").slice(0, 5),
       duplicateHoldings: this.duplicates(holdings).slice(0, 3),
       aiInsights: this.aiInsights(metrics, holdings),
       todayAssetMovement: this.todayAssetMovement(holdings, marketContext),
@@ -228,22 +233,27 @@ export class PortfolioService {
 
   private assetAllocation(holdings: HoldingRow[]) {
     const total = sum(holdings.map((holding) => holding.marketValue));
+    const cashValue = sum(holdings.filter((holding) => holding.assetType === "CASH").map((holding) => holding.marketValue));
     const buckets = [
       {
         name: "해외 주식",
-        value: sum(holdings.filter((holding) => holding.marketCountry === "US").map((holding) => holding.marketValue))
+        value: sum(holdings.filter((holding) => holding.marketCountry === "US" && holding.assetType !== "ETF").map((holding) => holding.marketValue))
       },
       {
         name: "국내 주식",
-        value: sum(holdings.filter((holding) => holding.marketCountry === "KR").map((holding) => holding.marketValue))
+        value: sum(holdings.filter((holding) => holding.marketCountry === "KR" && holding.assetType !== "ETF" && holding.assetType !== "CASH").map((holding) => holding.marketValue))
       },
       {
         name: "ETF",
         value: sum(holdings.filter((holding) => holding.assetType === "ETF").map((holding) => holding.marketValue))
       },
       {
+        name: "코인",
+        value: sum(holdings.filter((holding) => holding.assetType === "CRYPTO").map((holding) => holding.marketValue))
+      },
+      {
         name: "현금",
-        value: Math.max(0, total * 0.044)
+        value: cashValue
       }
     ];
 
@@ -298,7 +308,7 @@ export class PortfolioService {
   }
 
   private duplicates(holdings: HoldingRow[]) {
-    const grouped = groupBy(holdings, (holding) => holding.symbol);
+    const grouped = groupBy(holdings.filter((holding) => holding.assetType !== "CASH"), (holding) => holding.symbol);
     return Object.entries(grouped)
       .filter(([, rows]) => new Set(rows.map((row) => row.accountAlias)).size > 1)
       .map(([symbol, rows]) => {
@@ -326,7 +336,7 @@ export class PortfolioService {
   }
 
   private aiInsights(metrics: ReturnType<PortfolioService["metrics"]>, holdings: HoldingRow[]) {
-    const topHolding = holdings[0];
+    const topHolding = holdings.find((holding) => holding.assetType !== "CASH");
     const duplicateCount = this.duplicates(holdings).length;
     return [
       {
@@ -345,6 +355,113 @@ export class PortfolioService {
         description: `현재 입력 기준 연간 배당 예상은 ${Math.round(metrics.annualDividendEstimate).toLocaleString("ko-KR")}원입니다.`
       }
     ];
+  }
+
+  private async getCryptoHoldingRows(userId: string): Promise<HoldingRow[]> {
+    const [holdings, cashBalances] = await Promise.all([
+      this.prisma.cryptoHolding.findMany({
+        where: { userId },
+        include: {
+          asset: true,
+          connection: {
+            include: { credential: true }
+          }
+        }
+      }),
+      this.prisma.cryptoCashBalance.findMany({
+        where: { userId },
+        include: {
+          connection: {
+            include: { credential: true }
+          }
+        }
+      })
+    ]);
+
+    const cryptoRows: HoldingRow[] = holdings.map((row) => {
+      const quantity = Number(row.balance) + Number(row.locked);
+      const marketValue = Number(row.marketValueKrw);
+      const costAmount = Number(row.costAmountKrw);
+      const profitLoss = Number(row.profitLossKrw);
+      const metadata = readMetadata(row.connection.credential?.metadata);
+      return {
+        id: row.id,
+        accountId: row.connectionId,
+        broker: Broker.UPBIT,
+        accountAlias: metadata.label ?? "업비트 코인 계좌",
+        accountType: "CRYPTO",
+        accountSnapshotMarketValue: null,
+        accountSnapshotProfitLoss: null,
+        accountSnapshotReturnRate: null,
+        securityId: row.assetId,
+        symbol: row.symbol,
+        name: row.asset.nameKo ?? row.asset.nameEn ?? row.symbol,
+        marketCountry: "CRYPTO",
+        currency: "KRW",
+        assetType: "CRYPTO",
+        logoUrl: row.asset.logoUrl,
+        companyDomain: null,
+        logoSource: row.asset.logoUrl ? "MANUAL" : "FALLBACK",
+        quantity,
+        averagePurchasePrice: Number(row.avgBuyPrice),
+        marketPrice: Number(row.currentPrice),
+        regularMarketPrice: Number(row.currentPrice),
+        extendedMarketPrice: null,
+        lastPrice: Number(row.currentPrice),
+        previousClose: null,
+        displayPrice: Number(row.currentPrice),
+        priceSource: "UPBIT_REST_API",
+        priceUpdatedAt: row.priceUpdatedAt?.toISOString() ?? row.updatedAt.toISOString(),
+        isStale: false,
+        marketValue,
+        costAmount,
+        profitLoss,
+        profitLossRate: costAmount > 0 ? (profitLoss / costAmount) * 100 : Number(row.profitLossRate),
+        annualDividendEstimate: 0
+      };
+    });
+
+    const cashRows: HoldingRow[] = cashBalances.map((row) => {
+      const metadata = readMetadata(row.connection.credential?.metadata);
+      const quantity = Number(row.balance) + Number(row.locked);
+      return {
+        id: `cash:${row.id}`,
+        accountId: row.connectionId,
+        broker: Broker.UPBIT,
+        accountAlias: metadata.label ?? "업비트 코인 계좌",
+        accountType: "CRYPTO",
+        accountSnapshotMarketValue: null,
+        accountSnapshotProfitLoss: null,
+        accountSnapshotReturnRate: null,
+        securityId: `cash:${row.currency}`,
+        symbol: row.currency,
+        name: row.currency === "KRW" ? "원화 보유금" : `${row.currency} 현금`,
+        marketCountry: "KR",
+        currency: row.currency,
+        assetType: "CASH",
+        logoUrl: null,
+        companyDomain: null,
+        logoSource: "FALLBACK",
+        quantity,
+        averagePurchasePrice: 1,
+        marketPrice: 1,
+        regularMarketPrice: 1,
+        extendedMarketPrice: null,
+        lastPrice: 1,
+        previousClose: null,
+        displayPrice: 1,
+        priceSource: "UPBIT_REST_API",
+        priceUpdatedAt: row.updatedAt.toISOString(),
+        isStale: false,
+        marketValue: quantity,
+        costAmount: quantity,
+        profitLoss: 0,
+        profitLossRate: 0,
+        annualDividendEstimate: 0
+      };
+    });
+
+    return [...cryptoRows, ...cashRows];
   }
 }
 
@@ -369,6 +486,11 @@ function groupBy<T>(rows: T[], keyGetter: (row: T) => string) {
     acc[key].push(row);
     return acc;
   }, {});
+}
+
+function readMetadata(value: unknown): Record<string, any> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, any>;
 }
 
 function shouldConvertUsdToKrw({

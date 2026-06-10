@@ -125,7 +125,10 @@ export class RealMarketDataProvider implements MarketDataProvider {
   }
 
   async getCryptoPrices() {
-    return [await this.yahooIndicator("BTC-USD", "BTC", "비트코인", "CRYPTO", "USD", "USD", 60_000)];
+    return [
+      await this.yahooIndicator("BTC-USD", "BTC", "비트코인", "CRYPTO", "USD", "USD", 60_000),
+      await this.yahooIndicator("ETH-USD", "ETH", "이더리움", "CRYPTO", "USD", "USD", 60_000)
+    ];
   }
 
   private async yahooIndicator(

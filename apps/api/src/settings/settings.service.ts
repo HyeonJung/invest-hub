@@ -27,6 +27,13 @@ type NamuhCredentialInput = {
   environment?: "REAL" | "MOCK";
 };
 
+type UpbitCredentialInput = {
+  connectionId?: string;
+  label?: string;
+  accessKey: string;
+  secretKey?: string;
+};
+
 @Injectable()
 export class SettingsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -528,6 +535,128 @@ export class SettingsService {
     return this.listNamuhCredentials(userId);
   }
 
+  async listUpbitCredentials(userId: string) {
+    const connections = await this.prisma.brokerConnection.findMany({
+      where: { userId, broker: "UPBIT" },
+      include: { credential: true, cryptoHoldings: true, cryptoCashBalances: true },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return connections
+      .filter((connection) => {
+        const metadata = readMetadata(connection.credential?.metadata);
+        return metadata.provider === "upbit-open-api" || connection.brokerType === "UPBIT" || connection.brokerType === "UPBIT_ENV";
+      })
+      .map((connection, index) => {
+        const metadata = readMetadata(connection.credential?.metadata);
+        const cashKrw = connection.cryptoCashBalances
+          .filter((cash) => cash.currency === "KRW")
+          .reduce((sum, cash) => sum + Number(cash.balance) + Number(cash.locked), 0);
+
+        return {
+          connectionId: connection.id,
+          label: metadata.label ?? `업비트 ${index + 1}`,
+          accessKey: connection.credential?.clientId ?? null,
+          accessKeyPreview: connection.credential?.clientId ? previewCredentialSecret(connection.credential.clientId) : null,
+          secretPreview: metadata.secretPreview ?? null,
+          status: connection.status,
+          source: connection.brokerType === "UPBIT_ENV" ? "ENV" : "DB",
+          baseUrl: metadata.baseUrl ?? upbitBaseUrl(),
+          updatedAt: metadata.updatedAt ?? connection.updatedAt.toISOString(),
+          lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null,
+          lastPriceSyncedAt: connection.lastPriceSyncedAt?.toISOString() ?? null,
+          errorMessage: connection.errorMessage ?? metadata.errorMessage ?? null,
+          holdingsCount: connection.cryptoHoldings.length,
+          cashKrw
+        };
+      });
+  }
+
+  async saveUpbitCredentialProfile(userId: string, body: UpbitCredentialInput) {
+    const accessKey = body.accessKey?.trim();
+    const secretKey = body.secretKey?.trim();
+    if (!accessKey) {
+      throw new BadRequestException("업비트 Access Key를 입력하세요.");
+    }
+
+    const existing = body.connectionId
+      ? await this.prisma.brokerConnection.findFirst({
+          where: { id: body.connectionId, userId, broker: "UPBIT" },
+          include: { credential: true }
+        })
+      : null;
+    if (body.connectionId && !existing) {
+      throw new BadRequestException("수정할 업비트 API 키를 찾을 수 없습니다.");
+    }
+
+    const existingMetadata = readMetadata(existing?.credential?.metadata);
+    const canKeepSecret = Boolean(existing?.credential?.encryptedSecret) && existingMetadata.provider === "upbit-open-api";
+    if (!secretKey && !canKeepSecret) {
+      throw new BadRequestException("처음 저장할 때는 업비트 Secret Key가 필요합니다.");
+    }
+
+    const profileCount = await this.prisma.brokerConnection.count({ where: { userId, broker: "UPBIT" } });
+    const label = body.label?.trim() || existingMetadata.label || `업비트 ${profileCount + 1}`;
+    const connection = existing
+      ? await this.prisma.brokerConnection.update({
+          where: { id: existing.id },
+          data: {
+            brokerType: "UPBIT",
+            connectionType: "API",
+            status: existing.status ?? "INACTIVE",
+            errorMessage: null
+          }
+        })
+      : await this.prisma.brokerConnection.create({
+          data: {
+            userId,
+            broker: "UPBIT",
+            brokerType: "UPBIT",
+            connectionType: "API",
+            status: "INACTIVE"
+          }
+        });
+
+    await this.prisma.brokerCredential.upsert({
+      where: { connectionId: connection.id },
+      create: {
+        connectionId: connection.id,
+        clientId: accessKey,
+        encryptedSecret: encryptCredentialSecret(secretKey ?? ""),
+        metadata: upbitCredentialMetadata({
+          label,
+          accessKeyPreview: previewCredentialSecret(accessKey),
+          secretPreview: previewCredentialSecret(secretKey ?? ""),
+          errorMessage: null
+        })
+      },
+      update: {
+        clientId: accessKey,
+        ...(secretKey ? { encryptedSecret: encryptCredentialSecret(secretKey) } : {}),
+        metadata: upbitCredentialMetadata({
+          label,
+          accessKeyPreview: previewCredentialSecret(accessKey),
+          secretPreview: secretKey ? previewCredentialSecret(secretKey) : existingMetadata.secretPreview ?? null,
+          errorMessage: null
+        })
+      }
+    });
+
+    return this.listUpbitCredentials(userId);
+  }
+
+  async deleteUpbitCredentialProfile(userId: string, connectionId: string) {
+    const connection = await this.prisma.brokerConnection.findFirst({
+      where: { id: connectionId, userId, broker: "UPBIT" }
+    });
+    if (!connection) {
+      throw new BadRequestException("삭제할 업비트 API 키를 찾을 수 없습니다.");
+    }
+
+    await this.prisma.brokerConnection.delete({ where: { id: connection.id } });
+    return this.listUpbitCredentials(userId);
+  }
+
   private async ensureTossConnection(userId: string) {
     const existing = await this.prisma.brokerConnection.findFirst({ where: { userId, broker: "TOSS" } });
     await this.prisma.brokerConnection.upsert({
@@ -617,6 +746,35 @@ function namuhCredentialMetadata({
     },
     updatedAt: new Date().toISOString()
   };
+}
+
+function upbitCredentialMetadata({
+  label,
+  accessKeyPreview,
+  secretPreview,
+  errorMessage
+}: {
+  label: string;
+  accessKeyPreview: string;
+  secretPreview: string | null;
+  errorMessage: string | null;
+}) {
+  return {
+    provider: "upbit-open-api",
+    credentialType: "upbit-api-key",
+    storage: "broker_connection",
+    label,
+    baseUrl: upbitBaseUrl(),
+    accessKeyPreview,
+    secretPreview,
+    errorMessage,
+    permissionNotice: "업비트 API Key는 자산 조회 권한만 사용하는 것을 권장합니다.",
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function upbitBaseUrl() {
+  return process.env.UPBIT_API_BASE_URL?.trim() || "https://api.upbit.com";
 }
 
 function readNamuhSecret(encryptedSecret: string) {

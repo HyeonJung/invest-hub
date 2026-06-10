@@ -99,6 +99,7 @@ import {
 import { SecurityLogo } from "@/components/security-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useMarketIndicators } from "@/hooks/use-market-indicators";
+import { MobileAppShell } from "@/components/mobile/MobileAppShell";
 
 type StaticViewKey = "overview" | "upload" | "settings" | "ai" | "rebalance" | "dividend" | "tax" | "market" | "alerts";
 type AccountViewKey = `account:${string}`;
@@ -216,6 +217,24 @@ export default function DashboardPage() {
     }
   }, [notify, selectedAccount, summaryQuery.data, view]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedAccount = params.get("account");
+    const requestedView = desktopViewFromQuery(params.get("view"));
+
+    if (requestedAccount && accountNavigation.length > 0) {
+      const nextAccount = accountNavigation.find((account) => account.key === `account:${requestedAccount}`);
+      if (nextAccount && view !== nextAccount.key) {
+        setView(nextAccount.key);
+      }
+      return;
+    }
+
+    if (requestedView && view !== requestedView) {
+      setView(requestedView);
+    }
+  }, [accountNavigation, view]);
+
   if (!sessionChecked) {
     return <LoadingState label="로그인 세션을 확인하고 있습니다." />;
   }
@@ -275,6 +294,11 @@ export default function DashboardPage() {
   }
 
   return (
+    <>
+      <div className="block md:hidden">
+        <MobileAppShell initialView="home" />
+      </div>
+      <div className="hidden md:block">
     <div className="dashboard-shell flex h-screen w-screen overflow-hidden bg-[#F7F9FC]" data-dashboard-shell>
       <button
         type="button"
@@ -379,6 +403,8 @@ export default function DashboardPage() {
       </main>
       <AccountConnectionModal open={connectModalOpen} onClose={() => setConnectModalOpen(false)} onChoose={handleConnectChoice} />
     </div>
+      </div>
+    </>
   );
 }
 
@@ -5403,6 +5429,11 @@ function navLabel(view: ViewKey) {
 
 function isAccountView(view: ViewKey): view is AccountViewKey {
   return view.startsWith("account:");
+}
+
+function desktopViewFromQuery(value: string | null): StaticViewKey | null {
+  const views: StaticViewKey[] = ["overview", "upload", "settings", "ai", "rebalance", "dividend", "tax", "market", "alerts"];
+  return views.includes(value as StaticViewKey) ? (value as StaticViewKey) : null;
 }
 
 function buildAccountNavigation(summary?: PortfolioSummary): AccountNavigationItem[] {

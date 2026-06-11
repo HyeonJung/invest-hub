@@ -5754,26 +5754,30 @@ function buildAccountNavigation(summary?: PortfolioSummary): AccountNavigationIt
     grouped.set(key, [...(grouped.get(key) ?? []), holding]);
   }
 
-  const accounts =
-    summary.accounts?.length
-      ? summary.accounts
-      : Array.from(grouped.entries()).map(([accountId, holdings]) => {
-          const first = holdings[0];
-          return {
-            id: accountId,
-            broker: first.broker,
-            externalAccountId: null,
-            brokerAccountNo: null,
-            accountAlias: first.accountAlias,
-            accountType: first.accountType,
-            currencyBase: first.currency,
-            snapshotMarketValue: null,
-            snapshotProfitLoss: null,
-            snapshotReturnRate: null,
-            snapshotSyncedAt: null,
-            holdingsCount: holdings.length
-          };
-        });
+  const accountMap = new Map(
+    (summary.accounts ?? []).map((account) => [account.id, account])
+  );
+
+  for (const [accountId, holdings] of grouped.entries()) {
+    if (accountMap.has(accountId)) continue;
+    const first = holdings[0];
+    accountMap.set(accountId, {
+      id: accountId,
+      broker: first.broker,
+      externalAccountId: null,
+      brokerAccountNo: null,
+      accountAlias: first.accountAlias,
+      accountType: first.accountType,
+      currencyBase: first.currency,
+      snapshotMarketValue: null,
+      snapshotProfitLoss: null,
+      snapshotReturnRate: null,
+      snapshotSyncedAt: null,
+      holdingsCount: holdings.length
+    });
+  }
+
+  const accounts = Array.from(accountMap.values());
 
   return accounts
     .map((account) => {

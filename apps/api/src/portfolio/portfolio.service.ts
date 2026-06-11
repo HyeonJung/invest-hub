@@ -201,20 +201,29 @@ export class PortfolioService {
   }
 
   async getAccountRows(userId: string, broker?: Broker): Promise<AccountRow[]> {
-    const accounts = await this.prisma.investmentAccount.findMany({
-      where: {
-        userId,
-        ...(broker ? { broker } : {})
-      },
-      include: {
-        _count: {
-          select: { holdings: true }
-        }
-      },
-      orderBy: [{ broker: "asc" }, { createdAt: "asc" }]
-    });
+    const [accounts, cryptoConnections] = await Promise.all([
+      this.prisma.investmentAccount.findMany({
+        where: {
+          userId,
+          ...(broker ? { broker } : {})
+        },
+        include: {
+          _count: {
+            select: { holdings: true }
+          }
+        },
+        orderBy: [{ broker: "asc" }, { createdAt: "asc" }]
+      }),
+      !broker || broker === Broker.UPBIT
+        ? this.prisma.brokerConnection.findMany({
+            where: { userId, broker: Broker.UPBIT },
+            include: { credential: true, cryptoHoldings: true, cryptoCashBalances: true },
+            orderBy: { createdAt: "asc" }
+          })
+        : []
+    ]);
 
-    return accounts.map((account) => ({
+    const investmentAccounts = accounts.map((account) => ({
       id: account.id,
       broker: account.broker,
       externalAccountId: account.externalAccountId,
@@ -228,6 +237,31 @@ export class PortfolioService {
       snapshotSyncedAt: account.snapshotSyncedAt?.toISOString() ?? null,
       holdingsCount: account._count.holdings
     }));
+
+    const cryptoAccounts = cryptoConnections.map((connection, index) => {
+      const metadata = readMetadata(connection.credential?.metadata);
+      const cryptoMarketValue = sum(connection.cryptoHoldings.map((holding) => Number(holding.marketValueKrw)));
+      const cashValue = sum(connection.cryptoCashBalances.map((cash) => Number(cash.balance) + Number(cash.locked)));
+      const profitLoss = sum(connection.cryptoHoldings.map((holding) => Number(holding.profitLossKrw)));
+      const costAmount = Math.max(0, cryptoMarketValue - profitLoss);
+
+      return {
+        id: connection.id,
+        broker: Broker.UPBIT,
+        externalAccountId: connection.id,
+        brokerAccountNo: null,
+        accountAlias: metadata.label ?? `업비트 ${index + 1}`,
+        accountType: "CRYPTO",
+        currencyBase: "KRW",
+        snapshotMarketValue: cryptoMarketValue + cashValue,
+        snapshotProfitLoss: profitLoss,
+        snapshotReturnRate: costAmount > 0 ? (profitLoss / costAmount) * 100 : 0,
+        snapshotSyncedAt: connection.lastSyncedAt?.toISOString() ?? connection.updatedAt.toISOString(),
+        holdingsCount: connection.cryptoHoldings.length + connection.cryptoCashBalances.length
+      };
+    });
+
+    return [...investmentAccounts, ...cryptoAccounts];
   }
 
   buildSummary(holdings: HoldingRow[], marketContext: MarketContext, accounts: AccountRow[] = []) {

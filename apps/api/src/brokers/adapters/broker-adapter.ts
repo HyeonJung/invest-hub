@@ -61,6 +61,8 @@ export type BrokerConnectResult = {
   accounts: BrokerAccount[];
   selectedAccountNo: string | null;
   registeredAccountNos?: string[];
+  saved?: number;
+  syncErrors?: string[];
   credentialId?: string;
   message: string;
 };

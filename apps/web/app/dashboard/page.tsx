@@ -50,6 +50,7 @@ import {
   BrokerPortfolio,
   ChartDatum,
   Holding,
+  KiwoomConnectResult,
   KiwoomCredentialProfile,
   MarketIndicatorsResult,
   Metric,
@@ -2598,7 +2599,8 @@ function BrokerView({ broker, token, onNavigate }: { broker: BrokerKey; token: s
       }
       await queryClient.invalidateQueries({ queryKey: ["brokers", "kiwoom"] });
       await queryClient.invalidateQueries({ queryKey: ["broker", "KIWOOM"] });
-      notify({ kind: data.connected ? "success" : "info", title: "키움 연결", description: data.message });
+      await queryClient.invalidateQueries({ queryKey: ["summary"] });
+      notify({ kind: kiwoomConnectToastKind(data), title: "키움 연결", description: kiwoomConnectMessage(data) });
     },
     onError: (error) => notify({ kind: "error", title: "키움 연결 실패", description: (error as Error).message })
   });
@@ -3066,6 +3068,17 @@ function maskAccountNoForUi(accountNo: string) {
   if (accountNo.length <= 4) return accountNo;
   return `${accountNo.slice(0, 2)}****${accountNo.slice(-2)}`;
 }
+
+function kiwoomConnectToastKind(data: KiwoomConnectResult): "success" | "info" | "error" {
+  if (data.syncErrors?.length) return "error";
+  return data.connected ? "success" : "info";
+}
+
+function kiwoomConnectMessage(data: KiwoomConnectResult) {
+  if (!data.syncErrors?.length) return data.message;
+  return `${data.message} ${data.syncErrors.join(" ")}`;
+}
+
 function BrokerHoldingsTable({ data }: { data: BrokerPortfolio }) {
   return <TossStyleHoldingsList title={`${brokerLabels[data.broker]} 내 투자`} holdings={data.holdings} metrics={data.metrics} scope="broker" />;
 }
@@ -4348,6 +4361,7 @@ function KiwoomCredentialManager({ token }: { token: string }) {
       await queryClient.invalidateQueries({ queryKey: ["settings", "kiwoom-credentials"] });
       await queryClient.invalidateQueries({ queryKey: ["brokers", "kiwoom"] });
       await queryClient.invalidateQueries({ queryKey: ["broker", "KIWOOM"] });
+      await queryClient.invalidateQueries({ queryKey: ["summary"] });
       notify({ kind: "success", title: "키움 API 키 삭제", description: "키와 연결 토큰을 삭제했습니다." });
     },
     onError: (error) => notify({ kind: "error", title: "키 저장 실패", description: (error as Error).message })
@@ -4360,7 +4374,8 @@ function KiwoomCredentialManager({ token }: { token: string }) {
       await queryClient.invalidateQueries({ queryKey: ["settings", "kiwoom-credentials"] });
       await queryClient.invalidateQueries({ queryKey: ["brokers", "kiwoom"] });
       await queryClient.invalidateQueries({ queryKey: ["broker", "KIWOOM"] });
-      notify({ kind: data.connected ? "success" : "info", title: "키움 계좌 조회", description: data.message });
+      await queryClient.invalidateQueries({ queryKey: ["summary"] });
+      notify({ kind: kiwoomConnectToastKind(data), title: "키움 계좌 조회", description: kiwoomConnectMessage(data) });
     },
     onError: (error) => notify({ kind: "error", title: "키움 계좌 조회 실패", description: (error as Error).message })
   });
@@ -5143,6 +5158,7 @@ function KiwoomCredentialProfilesSettings({ token }: { token: string }) {
       await queryClient.invalidateQueries({ queryKey: ["settings", "kiwoom-credentials"] });
       await queryClient.invalidateQueries({ queryKey: ["brokers", "kiwoom"] });
       await queryClient.invalidateQueries({ queryKey: ["broker", "KIWOOM"] });
+      await queryClient.invalidateQueries({ queryKey: ["summary"] });
       notify({ kind: "success", title: "키움 API 키 삭제", description: "키와 연결 토큰을 삭제했습니다." });
     },
     onError: (error) => notify({ kind: "error", title: "키 삭제 실패", description: (error as Error).message })
@@ -5158,7 +5174,8 @@ function KiwoomCredentialProfilesSettings({ token }: { token: string }) {
       await queryClient.invalidateQueries({ queryKey: ["settings", "kiwoom-credentials"] });
       await queryClient.invalidateQueries({ queryKey: ["brokers", "kiwoom"] });
       await queryClient.invalidateQueries({ queryKey: ["broker", "KIWOOM"] });
-      notify({ kind: data.connected ? "success" : "info", title: "키움 계좌 조회", description: data.message });
+      await queryClient.invalidateQueries({ queryKey: ["summary"] });
+      notify({ kind: kiwoomConnectToastKind(data), title: "키움 계좌 조회", description: kiwoomConnectMessage(data) });
     },
     onError: (error) => notify({ kind: "error", title: "키움 계좌 조회 실패", description: (error as Error).message })
   });
@@ -5429,7 +5446,8 @@ function KiwoomCredentialSettings({ token }: { token: string }) {
     onSuccess: async (data) => {
       await queryClient.invalidateQueries({ queryKey: ["brokers", "kiwoom"] });
       await queryClient.invalidateQueries({ queryKey: ["broker", "KIWOOM"] });
-      notify({ kind: data.connected ? "success" : "info", title: "키움 계좌 조회", description: data.message });
+      await queryClient.invalidateQueries({ queryKey: ["summary"] });
+      notify({ kind: kiwoomConnectToastKind(data), title: "키움 계좌 조회", description: kiwoomConnectMessage(data) });
     },
     onError: (error) => notify({ kind: "error", title: "키움 계좌 조회 실패", description: (error as Error).message })
   });
@@ -5728,35 +5746,59 @@ function desktopViewFromQuery(value: string | null): StaticViewKey | null {
 }
 
 function buildAccountNavigation(summary?: PortfolioSummary): AccountNavigationItem[] {
-  if (!summary?.holdings.length) return [];
+  if (!summary) return [];
   const grouped = new Map<string, Holding[]>();
 
   for (const holding of summary.holdings) {
-    const key = `${holding.broker}|${cleanDisplayName(holding.accountAlias)}|${holding.accountType}`;
+    const key = holding.accountId;
     grouped.set(key, [...(grouped.get(key) ?? []), holding]);
   }
 
-  return Array.from(grouped.entries())
-    .map(([rawKey, holdings]) => {
-      const first = holdings[0];
+  const accounts =
+    summary.accounts?.length
+      ? summary.accounts
+      : Array.from(grouped.entries()).map(([accountId, holdings]) => {
+          const first = holdings[0];
+          return {
+            id: accountId,
+            broker: first.broker,
+            externalAccountId: null,
+            brokerAccountNo: null,
+            accountAlias: first.accountAlias,
+            accountType: first.accountType,
+            currencyBase: first.currency,
+            snapshotMarketValue: null,
+            snapshotProfitLoss: null,
+            snapshotReturnRate: null,
+            snapshotSyncedAt: null,
+            holdingsCount: holdings.length
+          };
+        });
+
+  return accounts
+    .map((account) => {
+      const holdings = grouped.get(account.id) ?? [];
       const metrics = metricsFromHoldings(holdings);
-      const brokerLabel = brokerLabels[first.broker];
-      const accountAlias = cleanDisplayName(first.accountAlias);
-      const shortName = buildAccountShortName(first.broker, accountAlias, first.accountType, holdings);
+      const brokerLabel = brokerLabels[account.broker];
+      const accountAlias = cleanDisplayName(account.accountAlias);
+      const shortName = buildAccountShortName(account.broker, accountAlias, account.accountType, holdings);
+      const snapshotMarketValue = account.snapshotMarketValue ?? 0;
+      const snapshotProfitLoss = account.snapshotProfitLoss ?? 0;
+      const fallbackCost = Math.max(0, snapshotMarketValue - snapshotProfitLoss);
 
       return {
-        key: `account:${stableHash(rawKey)}` as AccountViewKey,
-        id: rawKey,
-        broker: first.broker,
+        key: `account:${stableHash(account.id)}` as AccountViewKey,
+        id: account.id,
+        broker: account.broker,
         brokerLabel,
         accountAlias,
-        accountType: first.accountType,
-        displayName: `${brokerShortLabel(first.broker)} ${shortName}`,
+        accountType: account.accountType,
+        displayName: `${brokerShortLabel(account.broker)} ${shortName}`,
         shortName,
         holdings,
-        marketValue: metrics.totalMarketValue,
-        profitLoss: metrics.totalProfitLoss,
-        returnRate: metrics.returnRate,
+        marketValue: holdings.length > 0 ? metrics.totalMarketValue : snapshotMarketValue,
+        profitLoss: holdings.length > 0 ? metrics.totalProfitLoss : snapshotProfitLoss,
+        returnRate: holdings.length > 0 ? metrics.returnRate : account.snapshotReturnRate ?? (fallbackCost > 0 ? (snapshotProfitLoss / fallbackCost) * 100 : 0),
         annualDividendEstimate: metrics.annualDividendEstimate
       };
     })

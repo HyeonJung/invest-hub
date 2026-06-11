@@ -44,6 +44,21 @@ type HoldingRow = {
   annualDividendEstimate: number;
 };
 
+type AccountRow = {
+  id: string;
+  broker: Broker;
+  externalAccountId: string | null;
+  brokerAccountNo: string | null;
+  accountAlias: string;
+  accountType: string;
+  currencyBase: string;
+  snapshotMarketValue: number | null;
+  snapshotProfitLoss: number | null;
+  snapshotReturnRate: number | null;
+  snapshotSyncedAt: string | null;
+  holdingsCount: number;
+};
+
 @Injectable()
 export class PortfolioService {
   constructor(
@@ -54,8 +69,11 @@ export class PortfolioService {
 
   async getSummary(userId: string) {
     const marketContext = await this.marketIndicatorsService.getMarketContext(userId);
-    const holdings = await this.getHoldingRows(userId, undefined, marketContext.usdKrwRate);
-    return this.buildSummary(holdings, marketContext);
+    const [holdings, accounts] = await Promise.all([
+      this.getHoldingRows(userId, undefined, marketContext.usdKrwRate),
+      this.getAccountRows(userId)
+    ]);
+    return this.buildSummary(holdings, marketContext, accounts);
   }
 
   async getBrokerPortfolio(userId: string, broker: string) {
@@ -182,10 +200,41 @@ export class PortfolioService {
     return [...stockHoldings, ...cryptoHoldings].sort((a, b) => b.marketValue - a.marketValue);
   }
 
-  buildSummary(holdings: HoldingRow[], marketContext: MarketContext) {
+  async getAccountRows(userId: string, broker?: Broker): Promise<AccountRow[]> {
+    const accounts = await this.prisma.investmentAccount.findMany({
+      where: {
+        userId,
+        ...(broker ? { broker } : {})
+      },
+      include: {
+        _count: {
+          select: { holdings: true }
+        }
+      },
+      orderBy: [{ broker: "asc" }, { createdAt: "asc" }]
+    });
+
+    return accounts.map((account) => ({
+      id: account.id,
+      broker: account.broker,
+      externalAccountId: account.externalAccountId,
+      brokerAccountNo: account.brokerAccountNo,
+      accountAlias: account.accountAlias,
+      accountType: account.accountType,
+      currencyBase: account.currencyBase,
+      snapshotMarketValue: account.snapshotMarketValue == null ? null : Number(account.snapshotMarketValue),
+      snapshotProfitLoss: account.snapshotProfitLoss == null ? null : Number(account.snapshotProfitLoss),
+      snapshotReturnRate: account.snapshotReturnRate == null ? null : Number(account.snapshotReturnRate),
+      snapshotSyncedAt: account.snapshotSyncedAt?.toISOString() ?? null,
+      holdingsCount: account._count.holdings
+    }));
+  }
+
+  buildSummary(holdings: HoldingRow[], marketContext: MarketContext, accounts: AccountRow[] = []) {
     const metrics = this.metrics(holdings, marketContext);
     return {
       metrics,
+      accounts,
       assetAllocation: this.assetAllocation(holdings),
       accountValues: this.accountValues(holdings),
       accountReturns: this.accountReturns(holdings),

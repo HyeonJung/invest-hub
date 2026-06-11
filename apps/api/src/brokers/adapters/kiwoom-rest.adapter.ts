@@ -93,6 +93,16 @@ export class KiwoomRestAdapter implements BrokerAdapter {
         registeredAccountNos.push(selected.brokerAccountNo);
       }
     }
+    let saved = 0;
+    const syncErrors: string[] = [];
+    for (const accountNo of registeredAccountNos) {
+      try {
+        const result = await this.syncAll(userId, { accountNo, credentialId: token.connectionId ?? undefined });
+        saved += result.saved;
+      } catch (error) {
+        syncErrors.push(`${maskAccountNo(accountNo)}: ${(error as Error).message}`);
+      }
+    }
 
     return {
       broker: this.broker,
@@ -100,10 +110,14 @@ export class KiwoomRestAdapter implements BrokerAdapter {
       accounts,
       selectedAccountNo: registeredAccountNos[0] ?? null,
       registeredAccountNos,
+      saved,
+      syncErrors,
       credentialId: token.connectionId ?? undefined,
       message:
-        registeredAccountNos.length > 0
-          ? `키움 계좌 ${registeredAccountNos.map(maskAccountNo).join(", ")} 등록이 완료되었습니다.`
+        registeredAccountNos.length > 0 && syncErrors.length > 0
+          ? `키움 계좌 ${registeredAccountNos.map(maskAccountNo).join(", ")} 등록은 완료됐지만 보유종목 동기화에 실패했습니다.`
+          : registeredAccountNos.length > 0
+          ? `키움 계좌 ${registeredAccountNos.map(maskAccountNo).join(", ")} 등록과 보유종목 ${saved}개 동기화가 완료되었습니다.`
           : "키움 계좌를 조회했습니다. 등록할 계좌를 선택하세요."
     };
   }

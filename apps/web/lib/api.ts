@@ -290,6 +290,7 @@ export type ChartDatum = {
 
 export type Holding = {
   id: string;
+  accountId: string;
   securityId: string;
   broker: BrokerKey;
   accountAlias: string;
@@ -318,6 +319,21 @@ export type Holding = {
   profitLoss: number;
   profitLossRate: number;
   annualDividendEstimate: number;
+};
+
+export type PortfolioAccount = {
+  id: string;
+  broker: BrokerKey;
+  externalAccountId: string | null;
+  brokerAccountNo: string | null;
+  accountAlias: string;
+  accountType: string;
+  currencyBase: string;
+  snapshotMarketValue: number | null;
+  snapshotProfitLoss: number | null;
+  snapshotReturnRate: number | null;
+  snapshotSyncedAt: string | null;
+  holdingsCount: number;
 };
 
 export type SecurityLogoResult = {
@@ -356,6 +372,7 @@ export type AdminSecuritiesResult = {
 
 export type PortfolioSummary = {
   metrics: Metric;
+  accounts: PortfolioAccount[];
   assetAllocation: ChartDatum[];
   accountValues: ChartDatum[];
   accountReturns: ChartDatum[];
@@ -523,6 +540,8 @@ export type KiwoomConnectResult = {
   accounts: KiwoomAccount[];
   selectedAccountNo: string | null;
   registeredAccountNos?: string[];
+  saved?: number;
+  syncErrors?: string[];
   credentialId?: string;
   message: string;
 };
